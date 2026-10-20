@@ -1,0 +1,821 @@
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"/>
+        <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+                <title>Featured - MovieBoxPro</title>
+                <link rel="stylesheet" type="text/css" href="/static/css/style_mobile.css?rand=ed958a7e2224d0f837d32a1621440195"/>
+        <link rel="stylesheet" type="text/css" href="/static/css/titatoggle-dist.css?rand=ed958a7e2224d0f837d32a1621440195"/>
+        <link rel="stylesheet" type="text/css" href="/static/css/jquery.autocomplete.css?rand=ed958a7e2224d0f837d32a1621440195" />
+        <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png">
+                <style type="text/css">
+            .checkbox-slider--b input + span:before{box-shadow: 0 0 0 0;background: rgba(100, 100, 100, 0.3);}
+            .checkbox-slider--b input + span:after{width:16px;height:16px;}
+            .checkbox-slider--b input:checked + span:before{background:#007AFF;}
+        </style>
+        <script src="/static/js/device_bind.js?v=20261015-2"></script>
+        <link rel="stylesheet" href="/static/css/country-flag-fallback.css?rand=ed958a7e2224d0f837d32a1621440195">
+        <link rel="stylesheet" href="/static/css/filter-screen-scroll.css?rand=ed958a7e2224d0f837d32a1621440195">
+        <link rel="stylesheet" href="/static/css/comment_translate.css?rand=ed958a7e2224d0f837d32a1621440195">
+        <script src="/static/js/country-flag-fallback.js?rand=ed958a7e2224d0f837d32a1621440195"></script>
+        <script defer data-domain="movieboxpro.app" src="https://www.movieboxpro.app/js/script.js"></script>
+    </head>
+    <meta name="uid" content="0">
+    <meta name="is_vip" content="1">
+    <style>
+        .update_tips{width:calc(100% - 24px);padding:8px 12px;background:#FFEAC3;color:#666;font-size:12px;line-height:14px;text-align:center;}
+        .update_tips a{color:#0091FF;}
+    </style>
+    <body>
+        <div class="wrap">
+                        <div class="top_main">
+                <a href="/" class="logo"><img src="/static/img/mobile/logo_2.png" width="64" /></a>
+                <a href="/index/index/download_app" class="download_apps"><img src="/static/img/mobile/download_app.png" width="110"></a>
+                <span class="right">
+                    <a href="/index/index/my_box"><p class="like"><img src="/static/img/clock.png?rand=1" width="22" /><span class="fav_total" style="display: none;"></span></p></a>
+                    <img src="/static/img/search2.png" width="22" class="search_btn" />
+                    <img src="/static/img/mobile/sidebarbtn.png" width="22" class="sidebar" />
+                </span>
+            </div>
+            <div class="searchbg">
+    <div class="search">
+        <img src="/static/img/mobile/back.png" width="22" class="search_close" />
+        <div>
+            <img src="/static/img/mobile/search.png" width="16" style="vertical-align:middle;" />
+            <form id="search_form" action="/index/search/search" method="get" style="height:100%;display:inline-block;">
+                <input class="txt" type="text" name="key" placeholder="Search For Your Private Cinema" />
+            </form>
+        </div>
+    </div>
+    <div class="search_hot" style="padding:16px 8px;">
+        <div class="search_history">
+
+        </div>
+        <div class="trends">
+            <div>Trends</div>
+        </div>
+    </div>
+    <div class="search_text" style="padding:16px 8px;">
+        <div class="trends">
+        </div>
+    </div>
+    <div class="loading"><img src="/static/img/mobile/loading.png" width="30"></div>
+</div>
+<!--<div class="child_code_popup" style="display:none">-->
+<!--    <div class="child_code">-->
+<!--        <p><img src="/static/img/mobile/popup_close.png?rand=2" width="14" class="popup_close"></p>-->
+<!--        <p class="name">Trun on Child Mode</p>-->
+<!--        <p class="desc">Add four numbers to turn on child mode, remember the password to turn off it in case.</p>-->
+<!--        <div class="val-box" id="val-box">-->
+<!--            <input type="text" id="val-code-input" maxlength="4" onkeyup="checkForNum(this)" onselectstart="return false;" onblur="checkForNum(this)">-->
+<!--            <div name="val-item" class="val-item"></div>-->
+<!--            <div name="val-item" class="val-item"></div>-->
+<!--            <div name="val-item" class="val-item"></div>-->
+<!--            <div name="val-item" class="val-item"></div>-->
+<!--        </div>-->
+<!--        <p><img src="/static/img/mobile/turn_on.png?rand=2" width="86.2%" class="turn_on"></p>-->
+<!--    </div>-->
+<!--</div>-->
+<div class="child_mode_popup" style="display: none">
+    <div class="child_mode_con">
+        <p class="name"><span>Child Mode</span><img src="/static/img/mobile/popup_close.png?rand=2" width="14" class="popup_close"></p>
+        <div class="mode">
+            <img src="/static/img/mobile/child_mode.png" width="214">
+            <div class="on-off">
+                <div class="left">
+                    <p>Child Mode</p>
+                    <p>Auto hide contents of R18</p>
+                </div>
+                <div class="checkbox checkbox-slider--b" style="float:right;top:5px;right:10px;">
+                    <label>
+                        <input type="checkbox" name="child_mode"><span></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        <div class="mode">
+            <img src="/static/img/mobile/super_child_mode.png" width="214">
+            <div class="on-off">
+                <div class="left">
+                    <p>Super Child Mode</p>
+                    <p>Only show lists added</p>
+                </div>
+                <div class="checkbox checkbox-slider--b" style="float:right;top:5px;right:10px;">
+                    <label>
+                        <input type="checkbox" name="super_child_mode"><span></span>
+                    </label>
+                </div>
+            </div>
+            <div class="set_lists">
+                <p>Manage Lists</p>
+                <img src="/static/img/mobile/into.png" width="6" class="manage_lists">
+            </div>
+        </div>
+    </div>
+</div>
+<div class="child_code_set_popup" style="display: none">
+    <div class="child_code_set">
+        <p><img src="/static/img/mobile/popup_close.png?rand=2" width="14" class="popup_close"></p>
+        <p class="name">Set Password</p>
+        <p class="desc">Password required to active Child Mode</p>
+        <div class="val-box" id="val-box">
+            <input type="number" id="val-code-input" maxlength="4" onkeyup="checkForNum(this)" onselectstart="return false;" onblur="checkForNum(this)">
+            <div name="val-item" class="val-item available"></div>
+            <div name="val-item" class="val-item"></div>
+            <div name="val-item" class="val-item"></div>
+            <div name="val-item" class="val-item"></div>
+        </div>
+        <button class="confirm">Confirm</button>
+    </div>
+</div>
+<div class="child_code_confirm_popup" style="display: none">
+    <div class="child_code_confirm">
+        <p><img src="/static/img/mobile/popup_close.png?rand=2" width="14" class="popup_close"></p>
+        <p class="name">Verify Password</p>
+        <p class="desc">Verify the password required for Super Child Mode</p>
+        <div class="val-box" id="val-box2">
+            <input type="number" id="val-code-input2" maxlength="4" onkeyup="checkForNum(this)" onselectstart="return false;" onblur="checkForNum(this)">
+            <div name="val-item" class="val-item available"></div>
+            <div name="val-item" class="val-item"></div>
+            <div name="val-item" class="val-item"></div>
+            <div name="val-item" class="val-item"></div>
+        </div>
+    </div>
+</div>
+<div class="sidebarbg">
+    <div class="sidebarcon">
+        <div>
+            <div class="sidebar_top">
+                                <img src="" class="avatar" onerror="this.src='/static/img/avatar_default.png?rand=1';">
+                <p class="user">
+                                        <img src="/static/img/mobile/sidebar_vip.png" width="22" class="status" />
+                                        <span class="username">viewer</span>
+                    <a href="/index/index/logout"><img src="/static/img/mobile/logout.png" width="16" style="float:right;margin:3px 0 0 10px;"/></a>
+                </p>
+                            </div>
+            <p style="border:0.5px solid #333333;"></p>
+        </div>
+        <ul class="slidebar-ul">
+            <li>
+                <a class="home" href="/">Home</a>
+            </li>
+            <li style="line-height:19px;">
+                <a class="vip" href="/index/index/myvip">VIP
+                    <span class="time">
+                        Before:3/27/2027                    </span>
+                </a>
+            </li>
+            <li style="">
+                <a class="family_plan" href="/index/family">
+                    Family Plan
+                    <span id="slidebar_family_num" style="display: none;float: right;font-size: 11px;color: rgba(255,255,255,0.5); background-color: #007AFF;padding-left:5px;padding-right: 5px;border-radius: 5px;"></span>
+                </a>
+
+            </li>
+                        <li>
+                <a class="slide_history active" href="/index/index/history">History</a>
+            </li>
+                        <li>
+                <a class="slide_fav" href="/index/index/fav_list">Favorite<span class="fav_total" style="display: none;"></span></a>
+            </li>
+            <!--            <li>-->
+<!--                <a class="search_btn search_sidebar" href="javascript:;">Search</a>-->
+<!--            </li>-->
+                        <li>
+                <a class="mylist" href="/index/playlist/my_list?type=mine">My MovieLists</a>
+            </li>
+                        <li>
+                <a class="news2" href="/news">News Center</a>
+            </li>
+                        <li>
+                <a class="tv_guide" href="/index/index/tv_guide">TV Guide</a>
+            </li>
+                        <li>
+                <a class="app" href="/index/index/introduce">APP</a>
+            </li>
+            <li class="private_mode">
+                <a class="private" href="javascript:void(0);">Private Mode
+                    <div class="checkbox checkbox-slider--b" style="float:right;top:-2px;">
+                        <label>
+                            <input type="checkbox" name="private_mode"><span></span>
+                        </label>
+                    </div>
+                </a>
+            </li>
+            <li class="child_mode">
+                <a class="child" href="javascript:void(0);">Child Mode</a>
+            </li>
+            <li>
+                <a class="tv_login" href="/index/index/tv_login">Code Login</a>
+            </li>
+            <li>
+                <a class="faq" href="/faq_list">FAQ</a>
+            </li>
+            <li>
+                <a class="code" href="/index/invite/code" style="margin-left: unset;line-height: unset;">Invite code</a>
+            </li>
+            <li>
+                <a class="device" href="/index/index/device">Device</a>
+            </li>
+            <li>
+                <a class="ticket" href="/index/order">Tickets</a>
+            </li>
+            <li>
+                <a class="setting" href="/index/unsubscribe/setting">Settings</a>
+            </li>
+        </ul>
+    </div>
+</div>
+            <div class="nav_list">
+                <span class="selected">Featured<span class="horizontal"></span></span>
+                <a href="/movie" style="margin-left: 24px;"><span class="select">Movies<span class="horizontal"></span></span></a>
+                <a href="/tvshow" style="margin-left: 24px;"><span class="select">TV Shows<span class="horizontal"></span></span></a>
+                                <a href="/playlist" style="margin-left: 24px;"><span class="select">MovieLists<span class="horizontal"></span></span></a>
+                            </div>
+            <!--            <div style="width:100%;text-align: center;position: absolute;">-->
+<!--                <a href="/index/index/download_app"><img src="/static/img/home_download_app.png" style="width: 7.5rem;"></a>-->
+<!--            </div>-->
+            <div class="contents" style="margin-top:16px;">
+                <div style="display: none;"></div>
+                                <div class="recommend">
+                    <div class="recommend_roll">
+                                                <a href="/movie/81509">
+                            <p style="width:167px;height:95px;background-image:url(https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL2dnLzIwMjYvMTAvMTYvMjAyNjEwMTYwNzQzMDMxNTcwOS5qcGd8NTAwfDc0.png);background-repeat:no-repeat;background-size:cover;"></p>
+                        </a>
+                                                <a href="/tvshow/949">
+                            <p style="width:167px;height:95px;background-image:url(https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL2dnLzIwMjYvMTAvMTAvMjAyNjEwMTAwODAyMzM4NTIwNi5qcGd8NTAwfDc0.png);background-repeat:no-repeat;background-size:cover;"></p>
+                        </a>
+                                                <a href="/movie/71472">
+                            <p style="width:167px;height:95px;background-image:url(https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL2dnLzIwMjYvMTAvMDgvMjAyNjEwMDgwOTEyMDcxMDk3Ny5qcGd8NTAwfDc0.png);background-repeat:no-repeat;background-size:cover;"></p>
+                        </a>
+                                                <a href="/tvshow/80">
+                            <p style="width:167px;height:95px;background-image:url(https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL2dnLzIwMjYvMTAvMDgvMjAyNjEwMDgwOTA1NDQ1NDQ1OS5qcGd8NTAwfDc0.png);background-repeat:no-repeat;background-size:cover;"></p>
+                        </a>
+                                                <a href="/tvshow/270">
+                            <p style="width:167px;height:95px;background-image:url(https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL2dnLzIwMjYvMTAvMTYvMjAyNjEwMTYwNzQwNDE5MjcyMS5qcGd8NTAwfDc0.png);background-repeat:no-repeat;background-size:cover;"></p>
+                        </a>
+                                            </div>
+                </div>
+                                <div class="continue" style="margin:32px 0;">
+                    <p class="index_title">Waiting to Watch<a href="/index/index/my_box">More</a></p>
+                    <div class="continue_list">
+                        <div class="continue_roll">
+                                                        <div class="continue_movie" >
+                                <img src="https://thumb.chuaxin.com/thumb_placeholder.png" onclick="window.location.href='/movie/900001?from=home&play=1';"/>
+                                <img src="/static/img/mobile/play2.png" width="45" class="play"  onclick="window.location.href='/movie/900001?from=home&play=1';" />
+                                <div class="schedule">
+                                    <div class="schedule_con">
+                                        <p class="time">
+                                            <img src="/static/img/mobile/tips.png" width="15" onclick="window.location.href='/movie/900001?from=home';" />
+                                            <span>00:00:25</span>
+                                        </p>
+                                        <p class="progress_bar"><span style="width:0.33068783068783%"></span></p>
+                                    </div>
+                                </div>
+                            </div>
+                                                        <div class="continue_movie" >
+                                <img src="https://thumb.chuaxin.com/thumb_placeholder.png" onclick="window.location.href='/movie/900002?from=home&play=1';"/>
+                                <img src="/static/img/mobile/play2.png" width="45" class="play"  onclick="window.location.href='/movie/900002?from=home&play=1';" />
+                                <div class="schedule">
+                                    <div class="schedule_con">
+                                        <p class="time">
+                                            <img src="/static/img/mobile/tips.png" width="15" onclick="window.location.href='/movie/900002?from=home';" />
+                                            <span>01:43:22</span>
+                                        </p>
+                                        <p class="progress_bar"><span style="width:93.969696969697%"></span></p>
+                                    </div>
+                                </div>
+                            </div>
+                                                        <div class="continue_movie" >
+                                <img src="https://thumb.chuaxin.com/thumb_placeholder.png" onclick="window.location.href='/movie/900003?from=home&play=1';"/>
+                                <img src="/static/img/mobile/play2.png" width="45" class="play"  onclick="window.location.href='/movie/900003?from=home&play=1';" />
+                                <div class="schedule">
+                                    <div class="schedule_con">
+                                        <p class="time">
+                                            <img src="/static/img/mobile/tips.png" width="15" onclick="window.location.href='/movie/900003?from=home';" />
+                                            <span>00:03:51</span>
+                                        </p>
+                                        <p class="progress_bar"><span style="width:4.7530864197531%"></span></p>
+                                    </div>
+                                </div>
+                            </div>
+                                                        
+                                                        <a href="/index/index/history"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Today's Hot Movies<a href="/index/index/movie_list?type=dayhot">More</a></p>
+                    <div class="movie_list">
+                        <div class="movie_list_roll">
+                                                        <a href="/movie/82344" title="Street Fighter" class="click_push" data-id="82344">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTkvMjAyNjEwMTkwMjA2MjYyNDA2My5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/tc_icon.png?rand=1" width="30" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>6.2</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>42%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/35086" title="Street Fighter: Assassin's Fist The Movie" class="click_push" data-id="35086">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMDgvMTQvMjAyNjA4MTQxODM1MzkyNDM2Ny5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>7.1</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/82273" title="Matchbox the Movie" class="click_push" data-id="82273">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTkvMjAyNjEwMTkwMjA1MTkzMjYwMS5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/4k_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>5.7</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>26%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/82944" title="Runner" class="click_push" data-id="82944">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTkvMjAyNjEwMTkwMjAyNDEyOTY4MS5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>6.3</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>78%</span>
+                                </p>
+                            </a>
+                                                        
+                                                        <a href="/index/index/movie_list?type=dayhot"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Movies You Might Like<a href="/index/index/movie_list?type=maybe_like">More</a></p>
+                    <div class="movie_list maybe_like2">
+                        <div class="movie_list_roll">
+                            <p style="text-align:center;line-height:175px;"><img src="/static/img/fav_btn_loading.gif" style="width:30px;height:30px;vertical-align:middle"></p>
+                        </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Our Editors' Picks<a href="/index/index/movie_list?type=home_recommend_playlist">More</a></p>
+                    <div class="movie_list">
+                        <div class="movie_list_roll">
+                                                        <a href="/movie/83233" title="The Nice Ones" class="click_push" data-id="83233">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMDEvMjAyNjEwMDExODAyMjI1MDUwMi5qcGd8NTAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>3.8</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/83240" title="Infirmary" class="click_push" data-id="83240">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMDIvMjAyNjEwMDIxODAyMjAyOTgyOS5qcGd8NTAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>4.2</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>53%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/83261" title="Heart of a Woman" class="click_push" data-id="83261">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMDQvMjAyNjEwMDQxMjEwMTk1Njk1Ni5qcGd8NTAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>4.5</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/83268" title="Kidnapped in Her Own Home: The Martha Carelli Story" class="click_push" data-id="83268">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMDQvMjAyNjEwMDQxMjM2MTg1OTgxMS5qcGd8NTAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>6.1</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        
+                                                        <a href="/index/index/movie_list?type=home_recommend_playlist"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Top Movies of the Week<a href="/index/index/movie_list?type=weekhot">More</a></p>
+                    <div class="movie_list">
+                        <div class="movie_list_roll">
+                                                        <a href="/movie/4743" title="Coraline" class="click_push" data-id="4743">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTQvMjAyNjEwMTQwOTE1MTYzNTgzOC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/4k_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>7.8</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>91%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/35086" title="Street Fighter: Assassin's Fist The Movie" class="click_push" data-id="35086">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMDgvMTQvMjAyNjA4MTQxODM1MzkyNDM2Ny5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>7.1</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/81514" title="Disclosure Day" class="click_push" data-id="81514">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTgvMjAyNjEwMTgwNDA1MDU4NDI4MC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/4k_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>6.4</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>79%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/83450" title="Masterplan" class="click_push" data-id="83450">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTgvMjAyNjEwMTgwNDAwMDI1NTQwNC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>-</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        
+                                                        <a href="/index/index/movie_list?type=weekhot"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Today's Hot TV Shows<a href="/index/index/movie_list?type=dayhottv">More</a></p>
+                    <div class="movie_list">
+                        <div class="movie_list_roll">
+                                                        <a href="/tvshow/29638" title="Crystal Lake" class="click_push" data-id="29638">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjYvMDgvMjYvMjAyNjA4MjYwNDE5MzUyOTAwNy5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S01 E08</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>7.7</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>75%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/28979" title="Avatar: Seven Havens" class="click_push" data-id="28979">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjYvMDQvMTcvMjAyNjA0MTcxMTU4NTk4NTA5Mi5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S01 E06</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>100%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/22810" title="MobLand" class="click_push" data-id="22810">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjUvMDYvMjcvMjAyNTA2MjcwMjUwMjYzOTIzMC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S02 E05</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.3</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>83%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/29904" title="Cupertino" class="click_push" data-id="29904">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjYvMTAvMDUvMjAyNjEwMDUwMDA3MzM4OTMwNi5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S01 E02</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>7.6</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>100%</span>
+                                </p>
+                            </a>
+                                                        
+                                                        <a href="/index/index/movie_list?type=dayhottv"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Top TV Shows of the Week<a href="/index/index/movie_list?type=weekhottv">More</a></p>
+                    <div class="movie_list">
+                        <div class="movie_list_roll">
+                                                        <a href="/tvshow/29436" title="Carrie" class="click_push" data-id="29436">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjYvMDcvMjcvMjAyNjA3MjcxMDEzMTc2NTE4MC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S01 E08</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>7.9</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>85%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/32" title="South Park" class="click_push" data-id="32">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMTkvMDQvMTEvMjAxOTA0MTExMDE4MjI2NDIxNi5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S29 E03</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.7</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>80%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/141" title="The Mentalist" class="click_push" data-id="141">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMTkvMDQvMTEvMjAxOTA0MTExMDQ2MTkzMDMxMi5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S07 E13</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.2</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/3" title="Family Guy" class="click_push" data-id="3">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMTkvMDQvMTEvMjAxOTA0MTExMDE4MjE5MjcxMC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S24 E15</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.1</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        
+                                                        <a href="/index/index/movie_list?type=weekhottv"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Top IMDb Rated Movies<a href="/index/index/movie_list?type=imdb">More</a></p>
+                    <div class="movie_list">
+                        <div class="movie_list_roll">
+                                                        <a href="/movie/4515" title="Life Is Beautiful" class="click_push" data-id="4515">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTgvMjAyNjEwMTgwNTIzMzc3MjkzOS5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.6</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>80%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/11135" title="Seven Samurai" class="click_push" data-id="11135">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTgvMjAyNjEwMTgwMTU0MTc2OTYyNi5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/4k_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.6</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>100%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/14999" title="Ugetsu" class="click_push" data-id="14999">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTAvMjAyNjEwMTAxMDQ2MTE2NDY0MS5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.1</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>100%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/19344" title="May It Last: A Portrait of the Avett Brothers" class="click_push" data-id="19344">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTIvMjAyNjEwMTIwNjM5MjQyMTk5MC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.3</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>89%</span>
+                                </p>
+                            </a>
+                                                        
+                                                        <a href="/index/index/movie_list?type=imdb"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Latest Uploaded Movies<a href="/index/index/movie_list?type=newupload">More</a></p>
+                    <div class="movie_list">
+                        <div class="movie_list_roll">
+                                                        <a href="/movie/81689" title="Whalefall" class="click_push" data-id="81689">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTkvMjAyNjEwMTkwMjA5Mjg3Nzk1MS5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>6.8</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>71%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/82803" title="Sacrifice" class="click_push" data-id="82803">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTkvMjAyNjEwMTkwODAwMzI5MjYwOC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>5</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>38%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/82846" title="Love of Your Life" class="click_push" data-id="82846">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTkvMjAyNjEwMTkwMjAyMDgzNzQ1Ny5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/4k_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>6.5</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness2.png" width="11"/>                                    <span>81%</span>
+                                </p>
+                            </a>
+                                                        <a href="/movie/83337" title="Crawlers" class="click_push" data-id="83337">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL21vdmllLzIwMjYvMTAvMTgvMjAyNjEwMTgyMjA0NTg1ODI0NS5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <img src="/static/img/blu-ray_icon.png?rand=1" width="32" class="icon">
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>5.2</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>53%</span>
+                                </p>
+                            </a>
+                                                        
+                                                        <a href="/index/index/movie_list?type=newupload"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                                <div class="list_roll">
+                    <p class="index_title">Latest TV Updates<a href="/index/index/movie_list?type=newupdate">More</a></p>
+                    <div class="movie_list">
+                        <div class="movie_list_roll">
+                                                        <a href="/tvshow/18078" title="Signora Volpe" class="click_push" data-id="18078">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjIvMDUvMTAvMjAyMjA1MTAwMjAwMDM4NzA5Ny5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S03 E03</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>7.2</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/24261" title="Only Connect" class="click_push" data-id="24261">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjYvMDIvMTkvMjAyNjAyMTkxMDExMzQ0OTMzNy5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S22 E15</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.1</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/11974" title="Murdoch Mysteries" class="click_push" data-id="11974">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjAvMDMvMDQvMjAyMDAzMDQwMzIxNDQzMzQ4MC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S20 E03</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.2</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        <a href="/tvshow/29914" title="Between Steps" class="click_push" data-id="29914">
+                                <img src="https://thumb.chuaxin.com/thumb_dXBsb2FkaW1nL3R2LzIwMjYvMTAvMDcvMjAyNjEwMDcwNDQ2MTg1NTk5MC5qcGd8MzAwfDc0.png" onerror="this.src='/static/img/default_cover.png?rand=1';" />
+                                                                <p class="update">S01 E05</p>
+                                                                <p class="score"><img src="/static/img/score.png" width="13"><span>8.1</span></p>
+                                <p class="tomato">
+                                    <img src="/static/img/pc/freshness3.png" width="11"/>                                    <span>0%</span>
+                                </p>
+                            </a>
+                                                        
+                                                        <a href="/index/index/movie_list?type=newupdate"><img src="/static/img/mobile/all2.png" width="109" height="163"></a>
+                                                    </div>
+                    </div>
+                </div>
+                            </div>
+            <div class="private_mode_operation_popup">
+    <div class="private_mode_operation">
+        <p class="quit">Quit Private Mode</p>
+    </div>
+</div>
+
+<div class="error_tips">
+    <img src="/static/img/error_tip.png" width="16">
+    <span class="txt"></span>
+    <span class="tips_close">Close</span>
+</div>
+<footer class="footer">
+    <div class="device_app">
+        <img src="/static/img/mobile/logo_2.png" width="64">
+        <p class="app" onclick="window.location.href='/index/index/download_app';">
+            <img src="data:image/png;base64,iVBORw0KGgo=" width="17" height="20" />
+            <img src="data:image/png;base64,iVBORw0KGgo=" width="17" height="20" />
+            <img src="data:image/png;base64,iVBORw0KGgo=" width="18" height="18" />
+            <img src="/static/img/footer_icon_windows.png" width="17" height="19">
+        </p>
+    </div>
+    <div class="guide">
+        <div>
+            <p class="name">MovieBoxPro</p>
+            <a href="/index/index/tv_guide"><p>TV Guide</p></a>
+            <a href="/index/index/screenshot"><p>Screenshots</p></a>
+            <a href="/update_log"><p>Update Logs</p></a>
+        </div>
+        <div>
+            <p class="name">Account</p>
+            <a href="/index/index/myvip"><p>VIP</p></a>
+            <a href="/index/family"><p>Family Plan</p></a>
+            <a href="/index/index/device"><p>Devices Manager</p></a>
+        </div>
+        <div>
+            <p class="name">Help</p>
+            <a href="/faq"><p>FAQ</p></a>
+            <a href="/index/order"><p>Tickets</p></a>
+            <a href="/privacy_policy"><p>Privacy Policy</p></a>
+        </div>
+    </div>
+    <div class="copyright">
+                <a href="/index/unsubscribe/lang_list"><p class="lang_into"><img src="/static/img/pc/language2.png" width="12">AUTO</p></a>
+        <p>Copyright © 2018-2026 MovieBoxPro All right reserved</p>
+    </div>
+</footer>
+<script type="text/javascript" src="/static/js/jquery-1.7.min.js"></script>
+<script type="text/javascript" src="/static/js/jquery.autocomplete.js"></script>
+<script type="text/javascript" src="/static/js/index.js?rand=ed958a7e2224d0f837d32a1621440195"></script>
+<div class="translate_lang_list_popup">
+    <div class="translate_lang_list_con">
+        <p><img src="/static/img/mobile/close.png" width="16" class="popup_close"></p>
+        <div class="translate_lang_list"></div>
+        <div class="letter_list">
+            <a href="javascript:;" data-val="common"><p>#</p></a>
+            <a href="javascript:;" data-val="A"><p>A</p></a>
+            <a href="javascript:;" data-val="B"><p>B</p></a>
+            <a href="javascript:;" data-val="C"><p>C</p></a>
+            <a href="javascript:;" data-val="D"><p>D</p></a>
+            <a href="javascript:;" data-val="E"><p>E</p></a>
+            <a href="javascript:;" data-val="F"><p>F</p></a>
+            <a href="javascript:;" data-val="G"><p>G</p></a>
+            <a href="javascript:;" data-val="H"><p>H</p></a>
+            <a href="javascript:;" data-val="I"><p>I</p></a>
+            <a href="javascript:;" data-val="J"><p>J</p></a>
+            <a href="javascript:;" data-val="K"><p>K</p></a>
+            <a href="javascript:;" data-val="L"><p>L</p></a>
+            <a href="javascript:;" data-val="M"><p>M</p></a>
+            <a href="javascript:;" data-val="N"><p>N</p></a>
+            <a href="javascript:;" data-val="O"><p>O</p></a>
+            <a href="javascript:;" data-val="P"><p>P</p></a>
+            <a href="javascript:;" data-val="Q"><p>Q</p></a>
+            <a href="javascript:;" data-val="R"><p>R</p></a>
+            <a href="javascript:;" data-val="S"><p>S</p></a>
+            <a href="javascript:;" data-val="T"><p>T</p></a>
+            <a href="javascript:;" data-val="U"><p>U</p></a>
+            <a href="javascript:;" data-val="V"><p>V</p></a>
+            <a href="javascript:;" data-val="W"><p>W</p></a>
+            <a href="javascript:;" data-val="X"><p>X</p></a>
+            <a href="javascript:;" data-val="Y"><p>Y</p></a>
+            <a href="javascript:;" data-val="Z"><p>Z</p></a>
+        </div>
+    </div>
+</div>
+<div class="comment_translate_loading">
+    <img src="/static/img/loading.gif" width="32">
+</div>
+<div class="comment_translate_error_tips error_tips">
+    <img src="/static/img/error_tip.png" width="16">
+    <span class="txt"></span>
+    <span class="tips_close">Close</span>
+</div>
+<script type="text/javascript" src="/static/js/comment_translate.js?rand=ed958a7e2224d0f837d32a1621440195"></script>
+
+<script>
+    $(".error_tips .tips_close").click(function(){
+        $(".error_tips").hide();
+    });
+</script>
+        </div>
+
+        
+         <script language="javascript">
+            var width = $(document).width();
+            if(width < 352){
+                $(".nav_list").css("padding","0");
+            }
+
+            // $(".click_push").click(function () {
+            //     var id = $(this).attr("data-id");
+            //     $.ajax({
+            //         url : '/index/index/movie_click_push/mid/'+id,
+            //         type : 'get',
+            //         dataType : 'json',
+            //         success: function(data){
+            //         }
+            //     });
+            // });
+
+                        $.ajax({
+                url : '/index/index/maybe_like?mobile=1',
+                type : 'get',
+                dataType : 'json',
+                success: function(data){
+                    if(data.code === 1){
+                        $(".list_roll .maybe_like2 .movie_list_roll").html(data.data.list);
+                    }
+                }
+            });
+            
+            $(document).on('click', '.dislike', function (){
+                e.stopPropagation();
+                var id = $(this).attr("data-id");
+                $.ajax({
+                    url : '/index/index/movie_dislike_push/mid/'+id,
+                    type : 'get',
+                    dataType : 'json',
+                    success: function(data){
+                        location.reload();
+                    }
+                });
+            });
+
+            //鼠标滚动事件
+            // var step = 1;
+            // $(window).scroll(function () {
+            //     // console.log("滚动条到顶部的垂直高度：" + $(window).scrollTop());
+            //     // console.log("页面的文档高度：" + $(document).height());
+            //     // console.log("浏览器的高度：" + $(window).height());
+            //     var htmlHeight = document.body.scrollHeight || document.documentElement.scrollHeight;
+            //     var clientHeight=document.body.clientHeight||document.documentElement.clientHeight;
+            //     if(clientHeight == htmlHeight){
+            //         clientHeight=$(window).height();
+            //     }
+            //     var scrollTop = document.body.scrollTop || document.documentElement.scrollTop;
+            //     if (scrollTop + clientHeight >= htmlHeight-20 && step < 2) {
+            //         step=2;
+            //         console.log('load');
+            //         $(".loading2").show();
+            //         $.ajax({
+            //             type: 'POST',
+            //             url: "/index/index",
+            //             dataType: 'json',
+            //             data: {step:step},
+            //             success: function (data) {
+            //                 $(".loading2").hide();
+            //                 if (data.code === 1) {
+            //                     $(".contents").append(data.data.list);
+            //                 } else {
+            //                     alert('load error');
+            //                 }
+            //             }
+            //         });
+            //     }
+            // });
+
+            console.log(document.referrer);
+        </script>
+    </body>
+</html>
