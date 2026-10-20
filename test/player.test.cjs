@@ -283,7 +283,7 @@ t.test('a movie whose title page was already read plays without reading it again
   assert.strictEqual(player[0].query.mfid, '2176222', 'the first listed file, as before');
   const entries = await page.evaluate(() => window.__p.Log.entries().map(e => e.msg).join('\n'));
   assert.ok(/files 2 \(from the title page already read\)/.test(entries), entries);
-  assert.ok(/playing ORG after \d+\.\d s \(data \d+\.\d, src \d+\.\d, meta \d+\.\d.*stream 2 of 5\)/.test(entries), entries);
+  assert.ok(/playing ORG after \d+\.\d s \(data \d+\.\d, src \d+\.\d, (?:[a-z]+ \d+\.\d, )*meta \d+\.\d.*stream 2 of 5\)/.test(entries), entries);
   await done(page);
 });
 
@@ -1414,7 +1414,7 @@ t.test('hls.js: the platform player refuses HLS (media error 4), so the same str
   await play(page, EPISODE);
   await waitPlaying(page, { engine: 'hls.js', season: 1 });
   const log2 = (await logText(page)).split('open tv:17417').pop();
-  assert.ok(/try AUTO \(hls\.js\)/.test(log2) && !/try AUTO \(hls\)/.test(log2) && !/refused/.test(log2), log2);
+  assert.ok(/try AUTO \(hls\.js: remembered\)/.test(log2) && !/try AUTO \(hls\)/.test(log2) && !/refused/.test(log2), log2);
   m = await hlsMock(page);
   assert.deepStrictEqual(m.loads, ['site'], 'hls.js loads once');
   assert.deepStrictEqual(m.list.map(x => x.destroyed), [true, false]);
@@ -1510,10 +1510,17 @@ t.test('hls.js: a fatal media error is recovered once; a second one hands over t
   const page = await open({ mbp_hls: 'mse', mbp_len: 1200 });
   await play(page, MOVIE);
   await waitPlaying(page, { engine: 'hls.js' });
-  await waitTime(page, 2);
+  await waitTime(page, 6);
+  const before = (await video(page)).t;
   await page.evaluate(() => window.__hlsMock.fatal('mediaError', 'bufferAppendError'));
-  await page.waitForFunction(() => window.__hlsMock.summary()[0].log.indexOf('recoverMediaError') >= 0, null, { timeout: 5000 });
+  await page.waitForFunction(() => window.__hlsMock.summary()[0].log.some(x => /^recoverMediaError/.test(x)), null, { timeout: 5000 });
+  // Like hls.js 1.4, the stand-in re-attaches without playing and restarts at config.startPosition: the player sets
+  // that to the current place and plays again by itself (no OK needed, no jump back to the start).
+  const rec = (await hlsMock(page)).list[0].log.find(x => /^recoverMediaError/.test(x));
+  near(+rec.split(' at ')[1], before, 1.5, 'recovery restarts where the video was');
   await waitPlaying(page, { engine: 'hls.js', label: 'AUTO' });
+  await page.waitForFunction(b => document.querySelector('#mbptv-player video').currentTime > b + 0.5, before, { timeout: 5000 });
+  assert.strictEqual((await video(page)).paused, false, 'playing again after the recovery');
   const at = (await video(page)).t;
   await page.evaluate(() => window.__hlsMock.fatal('mediaError', 'bufferAppendError'));
   await waitPlaying(page, { label: 'ORG' });
@@ -1560,8 +1567,9 @@ t.test('hls.js: the app going to the background stops hls.js loading; coming bac
   await done(page);
 });
 
-t.test('a large original slow to give up its header counts as alive while data arrives (no timeout)', async () => {
-  const page = await open({ mbp_org: 'slow', mbp_len: 60 }, { config: { candidateTimeout: 2000, hlsEngine: 'native' } });
+t.test('a large original slow to give up its header counts as alive while data arrives (no timeout, no stall)', async () => {
+  // stallTimeout shorter than the 5 s trickle: the 'waiting' fired at play() must not fail a start that shows life.
+  const page = await open({ mbp_org: 'slow', mbp_len: 60 }, { config: { candidateTimeout: 2000, stallTimeout: 3000, hlsEngine: 'native' } });
   await play(page, MOVIE);
   await waitPlaying(page, {}, 30000);
   assert.strictEqual((await info(page)).label, 'ORG', await logText(page));
@@ -1580,6 +1588,176 @@ t.test('stream order (TV with Media Source Extensions): Matroska originals after
   });
   assert.deepStrictEqual(out.mse, ['AUTO', '1080p', '720p', '4K', 'ORG']);
   assert.deepStrictEqual(out.plain, ['AUTO', '1080p', 'ORG', '720p', '4K']);
+  await done(page);
+});
+
+// ---------- fast start (docs/PLAYER.md "Fast start") ----------
+
+const TIZEN9_UA = 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 9.0) AppleWebKit/537.36 (KHTML, like Gecko) 120.0.6099.5/9.0 TV Safari/537.36';
+
+t.test('fast start: on Tizen 9 HLS goes straight to hls.js the first time (no platform attempt), every rendition before the originals; hosts preconnected', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120 }, { ua: TIZEN9_UA });
+  assert.strictEqual((await page.evaluate(() => window.__p.NativePlayer.configure().hls)).engine, 'Tizen 9');
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js', label: 'AUTO' });
+  const log = await logText(page);
+  assert.ok(/order \[AUTO, 1080p, 720p, 360p, ORG\]/.test(log), log);
+  assert.ok(/try AUTO \(hls\.js: Tizen 9\)/.test(log) && !/try AUTO \(hls\)/.test(log) && !/refused/.test(log), log);
+  assert.ok(/preconnect hls\.shegu\.net, hls-aws\.shegu\.net/.test(log), log);
+  assert.ok(/playing AUTO after \d+\.\d s \(data \d+\.\d, src \d+\.\d, attach \d+\.\d, manifest \d+\.\d, playlist \d+\.\d, frag \d+\.\d, meta /.test(log), log);
+  const links = await page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('link[data-mbptv=preconnect]'), l => l.rel + ' ' + l.href + ' ' + l.crossOrigin));
+  assert.deepStrictEqual(links, ['preconnect https://hls.shegu.net/ anonymous', 'preconnect https://hls-aws.shegu.net/ anonymous']);
+  const m = await hlsMock(page);
+  assert.deepStrictEqual(m.list[0].config, { startFragPrefetch: true, testBandwidth: false, abrEwmaDefaultEstimate: 5000000 });
+  // Only host names are ever stored (no stream URL, no token).
+  const stored = await page.evaluate(() => JSON.stringify(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)])));
+  assert.ok(!/__media|sign=|REDACTED|tok=/.test(stored), stored);
+  await done(page);
+});
+
+t.test('fast start: warm() before Play loads hls.js and reads the episode\'s files ahead (never the player data); Play then needs one request', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120 }, { ua: TIZEN9_UA });
+  const w = await page.evaluate(e => window.__p.NativePlayer.warm({ why: 'title page', kind: 'tv', id: e.id, season: 1, episode: 1 }), EPISODE);
+  assert.strictEqual(w.engine, 'hls.js');
+  await page.waitForFunction(() => window.__p.NativePlayer.configure().hls.state === 'ready', null, { timeout: 5000 });
+  await page.waitForFunction(() => fetch('/__mock/player-log').then(r => r.json()).then(l => l.some(e => e.kind === 'tv_file')), null, { timeout: 5000 });
+  let plog = await playerLog(page);
+  assert.deepStrictEqual(plog.filter(e => e.kind === 'player'), [], 'warm never asks for player data');
+  assert.strictEqual(plog.filter(e => e.kind === 'tv_file').length, 1);
+  let log = await logText(page);
+  assert.ok(/hls\.js preload \(title page; Tizen 9\)/.test(log) && /reading ahead the files of S1E1 \(title page\)/.test(log), log);
+  // A second warm (the page shown again) does nothing new.
+  await page.evaluate(e => window.__p.NativePlayer.warm({ why: 'title page', kind: 'tv', id: e.id, season: 1, episode: 1 }), EPISODE);
+  await play(page, EPISODE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  plog = await playerLog(page);
+  assert.strictEqual(plog.filter(e => e.kind === 'tv_file').length, 1, 'the read-ahead list is used');
+  assert.strictEqual(plog.filter(e => e.kind === 'player').length, 1);
+  assert.deepStrictEqual((await hlsMock(page)).loads, ['site'], 'hls.js loaded once, before Play');
+  log = await logText(page);
+  assert.ok(/episode files 1 \(read ahead\)/.test(log), log);
+  // Elsewhere (a TV whose platform player plays HLS) nothing is preloaded.
+  const page2 = await open({ mbp_len: 60 });
+  const w2 = await page2.evaluate(() => window.__p.NativePlayer.warm({ why: 'home' }));
+  assert.deepStrictEqual(w2, { engine: 'native', hls: '' });
+  await done(page2);
+  await done(page);
+});
+
+t.test('fast start: the next episode\'s files are read ahead before Up Next, so autoplay goes straight to its player data', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 40 }, { ua: TIZEN9_UA, config: { upNextCount: 2 } });
+  await play(page, EPISODE);
+  await waitPlaying(page, { episode: 1 });
+  await setTime(page, 30);
+  await waitPlaying(page, { episode: 2 }, 30000);
+  const files = (await playerLog(page)).filter(e => e.kind === 'tv_file').map(e => e.body.episode);
+  assert.deepStrictEqual(files, ['1', '2'], 'one list per episode');
+  const log = await logText(page);
+  assert.ok(/reading ahead the files of S1E2 \(up next\)[\s\S]*episode files 1 \(read ahead\)/.test(log), log);
+  await done(page);
+});
+
+t.test('fast start: the start level follows the last measured bandwidth (configure hlsStart overrides it); the estimate is saved', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120 }, { ua: TIZEN9_UA });
+  await page.evaluate(() => localStorage.setItem('mbptv:hls-bw:v1', JSON.stringify({ bw: 4000000, at: Date.now() })));
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  let log = await logText(page);
+  assert.ok(/hls\.js: 4 levels \[360p, 720p, 1080p, 4K HEVC\], start 360p \(last 4 Mbit\/s\)/.test(log), log);
+  assert.strictEqual((await hlsMock(page)).list[0].config.abrEwmaDefaultEstimate, 4000000);
+  await page.evaluate(() => window.__p.NativePlayer.stop('test'));
+  assert.strictEqual(JSON.parse(await page.evaluate(() => localStorage.getItem('mbptv:hls-bw:v1'))).bw, 20000000, 'hls.js\'s estimate kept for next time');
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  log = (await logText(page)).split('hls.js: 4 levels').pop();
+  assert.ok(/^ \[360p, 720p, 1080p, 4K HEVC\], start 1080p \(last 20 Mbit\/s\)/.test(log), log);
+  await page.evaluate(() => { window.__p.NativePlayer.stop('test'); window.__p.NativePlayer.configure({ hlsStart: '720p' }); });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  log = (await logText(page)).split('hls.js: 4 levels').pop();
+  assert.ok(/^ \[360p, 720p, 1080p, 4K HEVC\], start 720p \(hlsStart 720p\)/.test(log), log);
+  await done(page);
+});
+
+t.test('fast start: AUTO through hls.js too slow to start sends 720p and 360p before the 1080p address (same video as AUTO\'s start)', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_auto: 'hang', mbp_len: 120 }, { ua: TIZEN9_UA, config: { candidateTimeout: 1200 } });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js', label: '720p' }, 20000);
+  const log = await logText(page);
+  assert.ok(/stream AUTO \[hls\.js\] failed: timeout[\s\S]*AUTO was too slow: 720p, 360p next\ntry 720p \(hls\.js\)/.test(log), log);
+  await done(page);
+});
+
+t.test('a slow but progressing start is not failed as a stall: hls.js fragments arriving keep it alive (bug: the 15 s waiting timer ignored them)', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120 }, { ua: TIZEN9_UA, config: { candidateTimeout: 1200, stallTimeout: 1500 } });
+  await page.evaluate(() => { window.__hlsMock = { instances: [], loads: [], stuckAudio: false, slowStart: 4000 }; });
+  await play(page, MOVIE);
+  // Chromium fires 'waiting' as soon as play() is called on an element with no data yet.
+  await page.waitForFunction(() => window.__hlsMock.instances.length > 0 && window.__hlsMock.instances[0].log.indexOf('attach') >= 0, null, { timeout: 5000 });
+  await page.evaluate(() => { const e = document.createEvent('Event'); e.initEvent('waiting', false, false); document.querySelector('#mbptv-player video').dispatchEvent(e); });
+  await waitPlaying(page, { engine: 'hls.js' }, 20000);
+  const log = await logText(page);
+  assert.strictEqual((await info(page)).label, 'AUTO', log);
+  assert.ok(!/failed/.test(log), log);
+  await done(page);
+});
+
+t.test('hls.js: a saved position inside the last minute is not resumed (bug: hls.js jumped to its startPosition after the first fragment)', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120, mbp_seconds: 100 }, { ua: TIZEN9_UA });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  await page.waitForTimeout(800);
+  const v = await video(page);
+  assert.ok(v.t < 5, 'started at ' + v.t);
+  assert.ok(!/Resumed/.test(await text(page, '#mbptv-player .mbp-chip') || ''));
+  await done(page);
+});
+
+t.test('many episode switches through hls.js leave one live instance, one hls.js script, a bounded set of preconnect links and the quality badge (bug: the badge went blank)', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 60, mbp_eps: 12 }, { ua: TIZEN9_UA });
+  await play(page, EPISODE);
+  await waitPlaying(page, { episode: 1 });
+  assert.strictEqual(await text(page, '#mbptv-player .mbp-badges'), 'Auto');
+  for (let e = 2; e <= 7; e++) {
+    await key(page, 'chup');
+    await waitPlaying(page, { episode: e });
+  }
+  assert.strictEqual(await text(page, '#mbptv-player .mbp-badges'), 'Auto', 'badge after the switches');
+  const m = await hlsMock(page);
+  assert.strictEqual(m.list.length, 7);
+  assert.deepStrictEqual(m.list.map(x => x.destroyed), [true, true, true, true, true, true, false]);
+  const dom = await page.evaluate(() => ({ videos: document.querySelectorAll('video').length, scripts: document.querySelectorAll('script[data-mbptv=hls]').length,
+    links: document.querySelectorAll('link[data-mbptv=preconnect]').length }));
+  assert.deepStrictEqual({ videos: dom.videos, scripts: dom.scripts }, { videos: 1, scripts: 1 });
+  assert.ok(dom.links <= 4, 'preconnect links ' + dom.links);
+  await page.evaluate(() => window.__p.NativePlayer.stop('test'));
+  assert.ok((await hlsMock(page)).list.every(x => x.destroyed));
+  assert.strictEqual(await page.evaluate(() => document.querySelectorAll('video').length), 0, 'the overlay and its video are gone');
+  await done(page);
+});
+
+t.test('hls.js: a stream\'s clocks start once hls.js has loaded (bug: a slow script load used up AUTO\'s quiet time)', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120, mbp_hlslib: 'hang' }, { ua: TIZEN9_UA, config: { hlsLoadTimeout: 1500, candidateTimeout: 1000 } });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' }, 15000);
+  const log = await logText(page);
+  assert.strictEqual((await info(page)).label, 'AUTO', log);
+  assert.ok(/hls\.js site copy: timed out\nhls\.js 1\.4\.0-mock ready \(CDN copy/.test(log) && !/failed/.test(log), log);
+  await done(page);
+});
+
+t.test('stream order: with hls.js as the HLS engine every rendition comes before the originals (MP4 included)', async () => {
+  const page = await open();
+  const out = await page.evaluate(() => {
+    const P = window.__p.NativePlayer, can = () => 'maybe';
+    const src = [{ label: 'ORG', src: 'https://x.example/a.mp4', hls: false }, { label: 'AUTO', src: 'https://x.example/a.m3u8', hls: true },
+      { label: '4K', src: 'https://x.example/a.m3u8?quality=4K', hls: true, h265: true }, { label: '1080p', src: 'https://x.example/a.m3u8?quality=1080p', hls: true },
+      { label: '720p', src: 'https://x.example/a.m3u8?quality=720p', hls: true }, { label: '360p', src: 'https://x.example/a.m3u8?quality=360p', hls: true }];
+    return { hlsjs: P._order(src, { tv: true, aac: true, mse: true, hlsjs: true, canPlay: can, fileName: 'a.mp4' }).map(c => c.label),
+      native: P._order(src, { tv: true, aac: true, mse: true, canPlay: can, fileName: 'a.mp4' }).map(c => c.label) };
+  });
+  assert.deepStrictEqual(out.hlsjs, ['AUTO', '1080p', '720p', '360p', '4K', 'ORG']);
+  assert.deepStrictEqual(out.native, ['AUTO', 'ORG', '1080p', '720p', '360p', '4K']);
   await done(page);
 });
 

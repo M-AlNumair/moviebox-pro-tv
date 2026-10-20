@@ -1,6 +1,6 @@
 {
   "name": "moviebox-pro-tv",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Premium TV interface, remote search and a built-in player for MovieBox Pro in TizenBrew.",
   "license": "MIT",
   "packageType": "mods",

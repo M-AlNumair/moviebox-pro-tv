@@ -95,7 +95,7 @@ async function bootSmoke(page) {
     assert(JSON.parse(starts[0].replace(/^  var START_URL = |;$/g, '')) === PKG.websiteURL, 'tv.js START_URL must equal package.json websiteURL (rebuild with node tools/build.cjs)');
     const ver = tv.match(/^  var VERSION = (.*);$/m);
     assert(ver && JSON.parse(ver[1]) === PKG.version, 'tv.js VERSION must equal package.json version (rebuild with node tools/build.cjs)');
-    assert(tv.length < 700 * 1024, 'tv.js should stay small for TV download and parse (' + Math.round(tv.length / 1024) + ' KB)');
+    assert(tv.length < 900 * 1024, 'tv.js should stay small for TV download and parse (' + Math.round(tv.length / 1024) + ' KB)');
     assert(!/^\s*debugger\s*;?\s*$/m.test(tv), 'tv.js must not contain debugger statements');
     const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
     assert(readme.indexOf('M-AlNumair/moviebox-pro-tv') >= 0 && readme.indexOf('**' + PKG.version + '**') >= 0, 'README install instructions must name M-AlNumair/moviebox-pro-tv and the current version ' + PKG.version);

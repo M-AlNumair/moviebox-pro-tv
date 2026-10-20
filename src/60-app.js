@@ -219,6 +219,8 @@ var App = (function () {
     try { if (inst.onShow) inst.onShow(); } catch (e) { Log.warn('onShow', e); }
     if (mode === 'shell') focusScreenDefault();
     Kit.lazySoon(inst.el);
+    /* Samsung only: offer a newer MovieBox Pro app once Home has been idle a moment (src/65-update.js). */
+    if (inst.name === 'home') { try { Update.homeShown(); } catch (e3) { Log.warn('update', e3); } }
   }
 
   function rememberFocus() {
@@ -296,10 +298,36 @@ var App = (function () {
 
   function goHome() { nav('home'); }
 
+  /* Fast start (docs/PLAYER.md "Fast start"): once a title page has rendered, the built-in player loads hls.js (where
+     HLS plays through it) and reads ahead the file list of the episode its Play would start; Home warms hls.js once
+     the viewer has been idle a few seconds. Nothing here requests player data. */
+  var lastKeyAt = 0;
+  function warmPlayer(entry, tries) {
+    if (!entry || !nativeOn() || nativeActive() || typeof NativePlayer.warm !== 'function') return;
+    var screen = entry.screen, delay = screen === 'detail' ? 800 : screen === 'home' ? (tries ? 2000 : 6000) : -1;
+    if (delay < 0) return;
+    U.later(function () {
+      if (dead || mode !== 'shell' || top() !== entry || !entry.inst || nativeActive()) return;
+      /* Home: only while the viewer rests (loading hls.js costs the TV a moment of script compiling). */
+      if (screen === 'home' && U.now() - lastKeyAt < 1500) { if ((tries || 0) < 5) warmPlayer(entry, (tries || 0) + 1); return; }
+      var opts = { why: screen === 'detail' ? 'title page' : 'home' };
+      if (screen === 'detail') {
+        var p = entry.params || {}, model = null;
+        try { model = entry.inst.model ? entry.inst.model() : null; } catch (e) { model = null; }
+        if (p.kind === 'tv' && model && String(model.id) === String(p.id)) {
+          var ep = resolveEpisode({ kind: 'tv', id: p.id, item: p.item }, model);
+          opts.kind = 'tv'; opts.id = String(p.id); opts.season = ep.season; opts.episode = ep.episode;
+        }
+      }
+      try { NativePlayer.warm(opts); } catch (e2) { Log.warn('player-warm', e2); }
+    }, delay, 'player-warm');
+  }
+
   /* A screen finished its asynchronous render: restore the remembered focus, or the screen's default unless the
      viewer already moved on their own. */
   function screenReady(inst) {
     var entry = top();
+    if (entry && entry.inst === inst) warmPlayer(entry);
     if (!entry || entry.inst !== inst || mode !== 'shell' || topLayer()) return;
     if (entry.focusKey) {
       var t = Focus.byKey(inst.el, entry.focusKey);
@@ -1516,6 +1544,7 @@ var App = (function () {
     if (dead) return;
     var name = Keys.name(ev);
     if (!name) return;
+    lastKeyAt = U.now();
     if (ev.ctrlKey || ev.altKey || ev.metaKey) return;
     var handled = false;
     if (isHeldRepeat(name, ev)) {
@@ -1757,6 +1786,7 @@ var App = (function () {
     try { U.each(offs, function (off) { off(); }); } catch (e) {}
     offs = [];
     clearInterval(timers.watchdog); clearInterval(timers.monitor); clearTimeout(timers.boot); clearTimeout(timers.selfTest);
+    try { Update.stop(); } catch (e3) {}
     try { Site.live.quiet(false); } catch (e2) {}
   }
 

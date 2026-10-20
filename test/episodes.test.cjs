@@ -258,8 +258,9 @@ async function main() {
     const i = await nativeInfo(page);
     await expect(page, i && i.season === 1 && i.episode === 0 && i.id === '556', 'the special plays S1E0, not another episode', i);
     const log = await page.evaluate(() => fetch('/__mock/player-log').then(r => r.json()));
-    const tf = log.filter(e => e.kind === 'tv_file').pop();
-    await expect(page, tf && tf.body.season === '1' && tf.body.episode === '0', 'tv_file is asked for season 1 episode 0', tf);
+    // (The title page reads its Play episode's files ahead, and a 60 s episode reads the next one's at once.)
+    const tf = log.filter(e => e.kind === 'tv_file' && e.body.season === '1' && e.body.episode === '0');
+    await expect(page, tf.length === 1, 'tv_file is asked for season 1 episode 0', log.filter(e => e.kind === 'tv_file').map(e => e.body));
     const line = await page.evaluate(() => document.querySelector('#mbptv-player').textContent);
     await expect(page, /Building the Batman/.test(line), 'the player names the special (its title comes from the card)', line.slice(0, 200));
     await K.back(page);

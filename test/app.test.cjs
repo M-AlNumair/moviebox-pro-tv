@@ -729,13 +729,23 @@ async function main() {
   flow('built-in player: a show\'s Play resolves the episode the title page opens on (S2E1) and plays it', {}, async page => {
     await waitScreen(page, 'home');
     await waitFocus(page);
+    await nReset(page);
     await activate(page, '[data-key="tv:556"]');
     await waitScreen(page, 'detail');
     await waitUntil(page, 'the show\'s episodes', () => !!document.querySelector('#mbptv [data-episode="2x1"]'), null, 10000);
+    // Fast start: the title page reads ahead the file list of the episode its Play starts (never the player data).
+    const ahead = await waitUntil(page, 'a tv_file read-ahead for S2E1', () => fetch('/__mock/player-log').then(r => r.json()).then(l => l.some(e => e.kind === 'tv_file') ? l : null), null, 5000);
+    if (ahead.some(e => e.kind === 'player') || ahead.filter(e => e.kind === 'tv_file').map(e => e.body.season + 'x' + e.body.episode).join() !== '2x1') {
+      await fail(page, 'the title page should read only S2E1\'s files ahead, got ' + JSON.stringify(ahead.map(e => e.kind + ' ' + JSON.stringify(e.body || e.query))));
+    }
     await activate(page, '[data-action="play"]');
     await waitNativePlaying(page);
     const st = await nativeState(page);
     if (!st.info || st.info.season !== 2 || st.info.episode !== 1) await fail(page, 'a show-level Play should start S2E1 (the season the page shows, no resume label), got ' + JSON.stringify(st.info));
+    const reads = await page.evaluate(() => fetch('/__mock/player-log').then(r => r.json()));
+    // (A 60 s mock episode also reads S2E2's list ahead at once: Up Next is less than 90 s away.)
+    const s2e1 = reads.filter(e => e.kind === 'tv_file' && e.body.episode === '1');
+    if (s2e1.length !== 1 || reads.filter(e => e.kind === 'player').length !== 1) await fail(page, 'Play should use the read-ahead file list (one tv_file for S2E1, one player request), got ' + JSON.stringify(reads.map(e => e.kind + (e.body && e.body.episode ? ' E' + e.body.episode : ''))));
     const title = await page.evaluate(() => document.querySelector('#mbptv-player .mbp-title').textContent);
     if (/S\d+\s*E\d+/i.test(title)) await fail(page, 'the player title is the show name without an episode code, got ' + JSON.stringify(title));
     await hold(page, 'Escape', 6, 60); // a held Back closes the player once and leaves the detail screen on top

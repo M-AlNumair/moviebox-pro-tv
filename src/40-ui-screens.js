@@ -2203,6 +2203,7 @@ var Screens = (function () {
       fact('Screen', (window.innerWidth || 0) + ' \u00d7 ' + (window.innerHeight || 0));
       fact('Browser', String(navigator.userAgent || '').slice(0, 160));
       fact('Self-test', selfTestText(st), st && !st.ok);
+      fact('App update', Update.summary());
       var btns = Kit.zone(el('div', 'mb-btns', null, facts), 'buttons');
       Kit.button({ label: 'Run self-test', icon: 'stethoscope', action: 'selftest', primary: true, parent: btns });
       Kit.button({ label: 'Clear log', icon: 'close', action: 'clear-log', parent: btns });

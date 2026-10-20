@@ -1,0 +1,6 @@
+/* The MovieBox Pro app update dialog (src/65-update.js): taller than the exit dialog, so it sits higher. */
+#mbptv .mb-dialog.mb-update { width: 54em; margin: -15em 0 0 -27em; }
+#mbptv .mb-dialog.mb-update .mb-body { margin-bottom: .7em; }
+#mbptv .mb-dialog.mb-update .mb-update-notes { color: rgba(245, 245, 247, .6); white-space: pre-line; }
+#mbptv .mb-dialog.mb-update .mb-btns { margin-top: 1.3em; }
+#mbptv .mb-dialog.mb-update .mb-update-status { margin: 1em 0 1.5em; color: #f5f5f7; }

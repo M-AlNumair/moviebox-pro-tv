@@ -10,7 +10,7 @@ var NativePlayer = (function () {
     requestTimeout: 15000, retryDelay: 700, candidateTimeout: 15000, stallTimeout: 15000, osdHide: 4000,
     progressEvery: 20000, seekApply: 400, seekReport: 1500, upNextLead: 25, upNextCount: 10, chipMs: 6000,
     startBudget: 90000, stillWatchingAfter: 3, repeatGap: 250, subTimeout: 15000, candidateMax: 40000, audioTimeout: 8000,
-    audioVerify: 1500, seekSlack: 8, hlsLoadTimeout: 10000, audioSwitchTimeout: 10000
+    audioVerify: 1500, seekSlack: 8, hlsLoadTimeout: 10000, audioSwitchTimeout: 10000, fileTimeout: 25000, filesFresh: 600000
   };
   /* Held keys act once (the App's hold guard also swallows held OK/Back, including repeats that arrive after the
      player closed); arrows and FF/RW keep auto-repeat for seeking and sheet navigation. */
@@ -150,7 +150,13 @@ var NativePlayer = (function () {
 
   function environment(file) {
     var tv = isTV();
-    return { tv: tv, aac: needsAac(tv), mse: mse(), canPlay: canPlayProbe(), prefer: tv ? tvOrder : '', fileName: file && file.file || '', fileSize: file && file.size || '' };
+    return { tv: tv, aac: needsAac(tv), mse: mse(), hlsjs: !!hlsjsWhy(), canPlay: canPlayProbe(), prefer: tv ? tvOrder : '', fileName: file && file.file || '',
+      fileSize: file && file.size || '' };
+  }
+
+  /* 9 for "Tizen 9.0" in the user agent; 0 elsewhere. */
+  function tizenMajor() {
+    try { var m = /Tizen\s*(\d+)/i.exec(String(navigator.userAgent || '')); return m ? toInt(m[1]) : 0; } catch (e) { return 0; }
   }
 
   /* configure({tvOrder: 'ORG,AUTO'}): on a TV, try these stream labels first, in this order (the rest keep theirs).
@@ -262,23 +268,119 @@ var NativePlayer = (function () {
     return v && typeof v === 'object' && v.ua === String(navigator.userAgent || '') ? String(v.native || '') : '';
   }
 
+  /* Why HLS goes straight to hls.js here ('' = the platform player first): configure({hlsEngine: 'hlsjs'}); the
+     remembered verdict (the platform player refused HLS and hls.js then played it); Samsung Tizen 9 and later (its
+     web view refuses HLS in <video>: no attempt is wasted on it, not even the first time); a browser without native
+     HLS. Never without MSE, with hlsEngine 'native', or while no copy of hls.js could be loaded. */
+  function hlsjsWhy() {
+    if (hlsMode === 'native' || !mse() || libFailed()) return '';
+    if (hlsMode === 'hlsjs') return 'forced';
+    if (verdict() === 'refuses') return 'remembered';
+    if (tizenMajor() >= 9) return 'Tizen ' + tizenMajor();
+    return canPlayProbe()(HLS_MIME) ? '' : 'no native HLS';
+  }
+
   /* 'native' (the platform player) or 'hlsjs' for this candidate. */
   function engineFor(c) {
     if (!c || !c.hls || c.synthetic || /^data:/i.test(String(c.src || ''))) return 'native';
     if (c.engine) return c.engine;
-    if (hlsMode === 'native' || !mse() || libFailed()) return 'native';
-    if (hlsMode === 'hlsjs' || verdict() === 'refuses') return 'hlsjs';
-    return canPlayProbe()(HLS_MIME) ? 'native' : 'hlsjs';
+    return hlsjsWhy() ? 'hlsjs' : 'native';
   }
 
   /* After the platform player refused an HLS stream outright, the same stream is tried through hls.js. */
   function hlsRetryOk() { return hlsMode !== 'native' && mse() && !libFailed(); }
+
+  /* ---------- start-up warming (docs/PLAYER.md "Fast start") ----------
+     hls.js is loaded before Play (a title page opens, Home is idle) and the stream hosts' connections are opened while
+     the player data loads, so the first manifest request does not wait for a script or a TLS handshake. Only host
+     names are remembered (never URLs: those carry signed tokens). */
+
+  var HOSTS_KEY = 'mbptv:stream-hosts:v1';
+  var DEFAULT_HOSTS = ['hls.shegu.net', 'hls-aws.shegu.net']; /* the site's HLS hosts (master and segments), 2026-10 */
+  var HOST_RE = /^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?)+$/;
+  var preconnected = {};
+
+  function hostOf(u) { var m = /^https:\/\/([^\/?#:@]+)(?:[\/?#]|$)/i.exec(String(u || '')); var h = m ? m[1].toLowerCase() : ''; return HOST_RE.test(h) ? h : ''; }
+
+  function streamHosts() {
+    var v = Store.local.get(HOSTS_KEY, null), out = [];
+    U.each(v && isArray(v.hosts) ? v.hosts : [], function (h) { h = String(h || '').toLowerCase(); if (HOST_RE.test(h) && U.indexOf(out, h) < 0 && out.length < 4) out.push(h); });
+    return out.length ? out : DEFAULT_HOSTS.slice();
+  }
+
+  /* Remembers where streams come from (the master's host, the segments' host), newest first, at most 4. */
+  function learnHost(u) {
+    var h = hostOf(u);
+    if (!h) return;
+    var v = Store.local.get(HOSTS_KEY, null), list = v && isArray(v.hosts) ? v.hosts.slice() : [];
+    if (list[0] === h) return;
+    var i = U.indexOf(list, h);
+    if (i >= 0) list.splice(i, 1);
+    list.unshift(h);
+    Store.local.set(HOSTS_KEY, { hosts: list.slice(0, 4) });
+  }
+
+  /* <link rel=preconnect crossorigin> (hls.js reads streams by XHR without credentials: the anonymous socket pool).
+     A link is dropped after 30 s; the next Play adds a fresh one. */
+  function preconnect(hosts) {
+    var head = document.head || document.documentElement, done = [];
+    if (!head) return done;
+    U.each(hosts, function (h) {
+      if (!HOST_RE.test(h) || (preconnected[h] && U.now() - preconnected[h] < 8000)) return;
+      preconnected[h] = U.now();
+      var l = document.createElement('link');
+      l.rel = 'preconnect';
+      l.href = 'https://' + h;
+      l.crossOrigin = 'anonymous';
+      l.setAttribute('data-mbptv', 'preconnect');
+      head.appendChild(l);
+      done.push(h);
+      U.later(function () { U.detach(l); }, 30000, 'player-preconnect');
+    });
+    return done;
+  }
+
+  /* Before or at Play: hls.js loading (when HLS will play through it here) and, at Play, the stream hosts' connections. */
+  function warmStart(why, connect) {
+    var engine = hlsjsWhy();
+    if (!engine) return '';
+    if (!lib.state) {
+      Log.info('player', 'hls.js preload (' + why + '; ' + engine + ')');
+      hlsReady(function () {});
+    }
+    if (connect) {
+      var done = preconnect(streamHosts());
+      if (done.length) Log.info('player', 'preconnect ' + done.join(', '));
+    }
+    return engine;
+  }
+
+  /* The bandwidth hls.js measured in an earlier session (bits/s; 0 = unknown or older than a week). */
+  var BW_KEY = 'mbptv:hls-bw:v1';
+  function lastBandwidth() {
+    var v = Store.local.get(BW_KEY, null);
+    return v && +v.bw > 0 && U.now() - (+v.at || 0) < 7 * 86400000 ? +v.bw : 0;
+  }
+
+  function saveBandwidth(h) {
+    var bw = 0;
+    try { bw = +h.hls.bandwidthEstimate || 0; } catch (e) { bw = 0; }
+    if (h.frags > 0 && bw > 100000 && bw < 2000000000) Store.local.set(BW_KEY, { bw: Math.round(bw), at: U.now() });
+  }
+
+  function mbps(bw) { return bw >= 10000000 ? Math.round(bw / 1000000) : Math.round(bw / 100000) / 10; }
+
+  /* configure({hlsStart}): 'auto' (default: the best H.264 rendition up to 1080p, lower when the last measured
+     bandwidth would make its first 10 s segment slow), or '1080p' / '720p' / '360p' (at most that), for start-time
+     experiments on a TV. */
+  var hlsStart = 'auto';
 
   function destroyHls() {
     var h = hlsCur;
     hlsCur = null;
     if (!h) return;
     h.dead = true;
+    saveBandwidth(h);
     try { h.hls.destroy(); } catch (e) { Log.info('player', 'hls.js destroy: ' + clean(e)); }
   }
 
@@ -301,17 +403,27 @@ var NativePlayer = (function () {
     return i >= 0 && levels[i] ? levelName(levels[i]) : '';
   }
 
+  /* The first segment is about 10 s of video and nothing shows before it has arrived whole (the site's fMP4 segments
+     are one moof + mdat each): with a measured bandwidth, start on the best rendition whose segment arrives in about
+     3 s; without one, on the best up to 1080p (about 4.5 MB, 1-2 s on a home connection). */
+  function startLimit(bw) {
+    var cap = hlsStart === '720p' ? 760 : hlsStart === '360p' ? 480 : 1100;
+    return { height: cap, bitrate: hlsStart === 'auto' && bw > 0 ? bw / 3.5 : Infinity };
+  }
+
   /* AUTO lists the 4K HEVC HDR rendition first: hls.js would start there. Adaptive playback stays on H.264 (the best
-     rendition up to 1080p to start, the best H.264 one at most); 4K is the Quality menu's own choice. */
+     rendition up to 1080p to start, or lower per startLimit; the best H.264 one at most); 4K is the Quality menu's own
+     choice. */
   function hlsLevels(h, d) {
-    var levels = d && d.levels || [], hevc = 0, cap = -1, start = -1, i;
+    var levels = d && d.levels || [], hevc = 0, cap = -1, start = -1, low = -1, i, bw = lastBandwidth(), lim = startLimit(bw);
     try { if (!levels.length) levels = h.hls.levels || []; } catch (e) { levels = []; }
     for (i = 0; i < levels.length; i++) {
       if (hevcLevel(levels[i])) { hevc++; continue; }
       cap = i;
-      if ((+levels[i].height || 0) <= 1100) start = i;
+      if (low < 0) low = i;
+      if ((+levels[i].height || 0) <= lim.height && (+levels[i].bitrate || 0) <= lim.bitrate) start = i;
     }
-    if (start < 0) start = cap;
+    if (start < 0) start = lim.bitrate < Infinity || lim.height < 1100 ? low : cap;
     var names = U.map(levels, function (l) { return levelName(l) + (hevcLevel(l) ? ' HEVC' : ''); });
     if (levels.length > 1) {
       try {
@@ -320,7 +432,8 @@ var NativePlayer = (function () {
       } catch (e2) { Log.info('player', 'hls.js levels: ' + clean(e2)); }
     }
     Log.info('player', 'hls.js: ' + levels.length + (levels.length === 1 ? ' level' : ' levels') + ' [' + names.join(', ') + ']' +
-      (levels.length > 1 && start >= 0 ? ', start ' + names[start] : '') + (levels.length > 1 && hevc && cap >= 0 ? ', HEVC kept for the Quality menu' : ''));
+      (levels.length > 1 && start >= 0 ? ', start ' + names[start] + (hlsStart !== 'auto' ? ' (hlsStart ' + hlsStart + ')' : bw ? ' (last ' + mbps(bw) + ' Mbit/s)' : '') : '') +
+      (levels.length > 1 && hevc && cap >= 0 ? ', HEVC kept for the Quality menu' : ''));
   }
 
   function hlsAttach(s, c, H, at, tryId) {
@@ -329,16 +442,26 @@ var NativePlayer = (function () {
     /* Load from the start position directly (no first segment at 0); a resume outside the resume rules is moved back
        to 0 at loadedmetadata. */
     var start = at > 0 && !(s.resumePending && !(at > 10)) ? at : -1;
+    /* Fast start: the start level is chosen at MANIFEST_PARSED (hlsLevels), so no bandwidth test fragment (which
+       hls.js would load at the lowest level and throw away); startFragPrefetch lets the first fragment load before
+       the media source is open; the bandwidth guess before any measurement is the last session's. The site's
+       segments are one moof + mdat each, so progressive (chunked) appending would gain nothing. Buffers stay small
+       for TV memory: 30 s ahead (60 s at most, 60 MB) and 30 s behind. */
+    var bw = lastBandwidth();
     var cfg = {
-      startPosition: start, autoStartLoad: true, enableWorker: true, capLevelToPlayerSize: false, debug: false,
+      startPosition: start, autoStartLoad: true, startFragPrefetch: true, testBandwidth: false, abrEwmaDefaultEstimate: bw || 5000000,
+      enableWorker: true, capLevelToPlayerSize: false, debug: false,
       backBufferLength: 30, maxBufferLength: 30, maxMaxBufferLength: 60, maxBufferSize: 60 * 1000 * 1000,
       manifestLoadingTimeOut: 10000, manifestLoadingMaxRetry: 1, levelLoadingTimeOut: 10000, levelLoadingMaxRetry: 2,
       fragLoadingTimeOut: 20000, fragLoadingMaxRetry: 3
     };
     var hls = null;
+    mark(s, 'attach');
     try { hls = new H(cfg); } catch (e2) { s.failNote = 'hls.js: ' + clean(e2); candidateFailed(s, tryId, 'hls-other'); return; }
-    var h = { hls: hls, H: H, s: s, tryId: tryId, c: c, recovered: 0, level: -1, nonFatal: 0, levelLogs: 0, reported: false, audioWant: null, prefDone: false, stopped: false, dead: false };
+    var h = { hls: hls, H: H, s: s, tryId: tryId, c: c, recovered: 0, level: -1, nonFatal: 0, levelLogs: 0, reported: false, audioWant: null, prefDone: false,
+      stopped: false, dead: false, frags: 0, hostSeen: false };
     hlsCur = h;
+    learnHost(c.src);
     var E = H.Events || {};
     function on(name, fn) {
       if (!E[name]) return;
@@ -347,9 +470,16 @@ var NativePlayer = (function () {
         try { fn(data || {}); } catch (err) { Log.error('player-hls:' + name, err); }
       });
     }
-    on('MANIFEST_PARSED', function (d) { alive(s); hlsLevels(h, d); playVideo(s); });
-    on('LEVEL_LOADED', function () { alive(s); });
-    on('FRAG_LOADED', function () { alive(s); });
+    on('MANIFEST_PARSED', function (d) { mark(s, 'manifest'); alive(s); hlsLevels(h, d); playVideo(s); });
+    on('LEVEL_LOADED', function () { mark(s, 'playlist'); alive(s); });
+    on('FRAG_LOADED', function (d) {
+      var f = d.frag;
+      alive(s);
+      if (f && f.sn === 'initSegment') return;
+      h.frags++;
+      if (!f || f.type === 'main') mark(s, 'frag');
+      if (!h.hostSeen && f && f.url) { h.hostSeen = true; learnHost(f.url); }
+    });
     on('FRAG_BUFFERED', function () { alive(s); });
     on('LEVEL_SWITCHED', function (d) { hlsLevelSwitched(h, d.level); });
     on('AUDIO_TRACKS_UPDATED', function () { hlsAudioPref(h); if (s.ready) audioRefresh(s); });
@@ -378,26 +508,29 @@ var NativePlayer = (function () {
       return;
     }
     var media = type === (T.MEDIA_ERROR || 'mediaError'), codecs = /IncompatibleCodecs|AddCodecError/i.test(det);
-    if (media && !codecs && h.recovered < 1) {
-      h.recovered++;
-      Log.warn('player', desc + ': recovering once');
-      try { h.hls.recoverMediaError(); } catch (e) { Log.warn('player', 'hls.js recover: ' + clean(e)); }
-      return;
-    }
+    if (media && !codecs && h.recovered < 1) { hlsRecover(s, h, desc); return; }
     var reason = type === (T.NETWORK_ERROR || 'networkError') ? (/TimeOut/i.test(det) ? 'timeout' : 'hls-network') :
       media ? (codecs ? 'hls-format' : 'hls-media') : 'hls-other';
     s.failNote = desc;
     candidateFailed(s, h.tryId, reason);
   }
 
+  /* recoverMediaError() re-attaches the element: the load algorithm leaves it paused (hls.js 1.4 does not play it
+     again) and hls.js restarts at its config.startPosition (the resume or switch position, not where the video is).
+     So the start position becomes the current place first, and playback is asked for again unless the viewer (or
+     the background) paused it. */
+  function hlsRecover(s, h, desc) {
+    h.recovered++;
+    Log.warn('player', desc + ': recovering once');
+    var v = ui.video, t = v.currentTime > 0 ? v.currentTime : s.ready ? s.lastTime : s.pendingAt;
+    try { if (h.hls.config && t > 0) h.hls.config.startPosition = t; } catch (e0) {}
+    try { h.hls.recoverMediaError(); } catch (e) { Log.warn('player', 'hls.js recover: ' + clean(e)); }
+    if (!s.userPaused && !s.bgPaused && !(s.upnext && s.upnext.still)) playVideo(s);
+  }
+
   /* The video element reported an error while hls.js feeds it: recover once, as hls.js recommends. */
   function hlsMediaError(s, h, code) {
-    if (h.recovered < 1) {
-      h.recovered++;
-      Log.warn('player', 'media error ' + code + ' under hls.js: recovering once');
-      try { h.hls.recoverMediaError(); } catch (e) { Log.warn('player', 'hls.js recover: ' + clean(e)); }
-      return;
-    }
+    if (h.recovered < 1) { hlsRecover(s, h, 'media error ' + code + ' under hls.js'); return; }
     s.failNote = 'hls.js media error ' + code;
     candidateFailed(s, s.tryId, 'media-' + code);
   }
@@ -841,7 +974,10 @@ var NativePlayer = (function () {
       var mp4 = [], mkv = [], risky = [], hd = [], uhd = [];
       U.each(files, function (s) { var k = fileKind(s, env); (k === 'mp4' ? mp4 : k === 'mkv' ? mkv : risky).push(s); });
       U.each(fixed, function (s) { (rank(s.label) > 1080 ? uhd : hd).push(s); });
-      list = env.mse ? auto.concat(mp4, hd, uhd, other, mkv, risky) : auto.concat(mp4, hd.slice(0, 1), mkv, hd.slice(1), uhd, other, risky);
+      /* HLS through hls.js here (Tizen 9, the remembered verdict): every rendition before any original file, which
+         the platform player plays slowly or not at all on such TVs. */
+      if (env.hlsjs) list = auto.concat(hd, uhd, other, mp4, mkv, risky);
+      else list = env.mse ? auto.concat(mp4, hd, uhd, other, mkv, risky) : auto.concat(mp4, hd.slice(0, 1), mkv, hd.slice(1), uhd, other, risky);
     } else {
       var yes = [], no = [];
       U.each(files, function (s) { if (playable(s, env) && fileKind(s, env) !== 'risky') yes.push(s); else no.push(s); });
@@ -983,6 +1119,8 @@ var NativePlayer = (function () {
       showError(s, s.cands.length ? 'streams-failed' : 'network', 'MovieBox Pro is taking too long to start this video. Check your connection and try again.');
     }, CFG.startBudget);
     if (!s.id) { showError(s, 'bad-request', 'This title could not be identified.'); return; }
+    /* While the file list and player data load: hls.js (if not preloaded) and the stream hosts' connections. */
+    warmStart('play', true);
     if (req.fileUrl) { s.files = [{ index: 0, url: String(req.fileUrl), quality: '', file: '', size: '', date: '' }]; s.fileIndex = 0; loadPlayer(s, 0); return; }
     if (s.kind === 'tv') loadEpisodeFiles(s); else loadMovieFiles(s);
   }
@@ -1019,10 +1157,44 @@ var NativePlayer = (function () {
     }, 'player-files'));
   }
 
+  /* ---------- an episode's file list (POST tv_file), read ahead ----------
+     The list only names the episode's files and their player-data addresses (the website reads it when an episode is
+     picked, before anything plays); the player data, which starts a viewing, is only ever requested at Play. Read
+     ahead for the episode a title page's Play would start (warm) and for the next episode while one plays, and kept
+     for filesFresh (10 min), so Play goes straight to the player data. */
+  var episodeFiles = {}; /* 'tid:season:episode' -> {at, res, waiters} */
+
+  function filesKey(id, season, episode) { return String(id).replace(/[^\d]/g, '') + ':' + toInt(season) + ':' + toInt(episode); }
+
+  /* cb(err, res, early): the tv_file answer, shared by a read-ahead still on its way; early = it was read ahead. */
+  function readEpisodeFiles(id, season, episode, cb) {
+    var k = filesKey(id, season, episode), e = episodeFiles[k];
+    if (e && !e.waiters && U.now() - e.at < CFG.filesFresh) { cb(null, e.res, true); return; }
+    if (e && e.waiters) { e.waiters.push(cb); e.joined = true; return; }
+    e = episodeFiles[k] = { at: 0, res: null, waiters: [cb], joined: false };
+    send(null, { url: origin() + '/index/index/tv_file', body: 'tid=' + enc(id) + '&season=' + toInt(season) + '&episode=' + toInt(episode), label: 'tv_file' }, function (err, res) {
+      var list = e.waiters || [], joined = e.joined;
+      e.waiters = null;
+      e.at = U.now();
+      e.res = err ? null : res;
+      /* Only a good answer is kept: an error, a signed-out page or an unexpected answer is asked for again at Play. */
+      var j = err ? null : U.parseJSON(res && res.text);
+      if (err || !j || toInt(j.code) !== 1) { if (episodeFiles[k] === e) delete episodeFiles[k]; }
+      U.each(list, function (fn, i) { try { fn(err, res, joined && i > 0); } catch (x) { Log.error('player-tv-file', x); } });
+    });
+  }
+
+  function prefetchFiles(id, season, episode, why) {
+    if (!/\d/.test(String(id || '')) || !(toInt(season) > 0) || toInt(episode) < 0) return;
+    var e = episodeFiles[filesKey(id, season, episode)];
+    if (e && (e.waiters || U.now() - e.at < CFG.filesFresh)) return;
+    Log.info('player', 'reading ahead the files of S' + toInt(season) + 'E' + toInt(episode) + ' (' + why + ')');
+    readEpisodeFiles(id, season, episode, function () {});
+  }
+
   function loadEpisodeFiles(s) {
     setStatus(s, 'Getting the episode ready\u2026');
-    var body = 'tid=' + enc(s.id) + '&season=' + s.season + '&episode=' + s.episode;
-    send(s, { url: origin() + '/index/index/tv_file', body: body, label: 'tv_file' }, safe(s, function (err, res) {
+    readEpisodeFiles(s.id, s.season, s.episode, safe(s, function (err, res, early) {
       if (err) { failed(s, err, 'tv_file'); return; }
       if (signedOutRes(res)) { fallback(s, 'signed-out'); return; }
       var j = U.parseJSON(res.text);
@@ -1034,7 +1206,7 @@ var NativePlayer = (function () {
       }
       var html = j.data && typeof j.data.list === 'string' ? j.data.list : '';
       s.files = html ? filesIn(U.parseHTML('<ul>' + html + '</ul>')) : [];
-      Log.info('player', 'episode files ' + s.files.length);
+      Log.info('player', 'episode files ' + s.files.length + (early ? ' (read ahead)' : ''));
       if (!s.files.length) { showError(s, 'no-files', 'This episode has no playable files yet.'); return; }
       /* The first file, unless a file was asked for (Try another file, the quality sheet's files). */
       var fi = parseInt(s.req.fileIndex, 10);
@@ -1170,7 +1342,7 @@ var NativePlayer = (function () {
   function mark(s, name) { if (s.marks && !s.marks.hasOwnProperty(name)) s.marks[name] = U.now() - s.marks.t0; }
   function marksText(s) {
     var m = s.marks || {}, out = [];
-    U.each(['data', 'src', 'meta', 'seek', 'seeked', 'canplay'], function (k) { if (m.hasOwnProperty(k)) out.push(k + ' ' + (m[k] / 1000).toFixed(1)); });
+    U.each(['data', 'src', 'attach', 'manifest', 'playlist', 'frag', 'meta', 'seek', 'seeked', 'canplay'], function (k) { if (m.hasOwnProperty(k)) out.push(k + ' ' + (m[k] / 1000).toFixed(1)); });
     /* hls.js retries of a stream the platform player refused count as that stream */
     var n = 0, at = 0;
     U.each(s.cands, function (c, i) { if (!c.afterNative) n++; if (i <= s.ci && !c.afterNative) at = n; });
@@ -1184,32 +1356,37 @@ var NativePlayer = (function () {
     var c = s.cands[i];
     if (!c) { streamsFailed(s, at); return; }
     s.ci = i; s.ready = false; s.pendingAt = at > 0 ? at : 0; s.tryId++; s.userPaused = false; s.failNote = '';
-    var tryId = s.tryId, engine = engineFor(c);
+    var tryId = s.tryId, engine = engineFor(c), whyHls = engine === 'hlsjs' && !c.engine ? hlsjsWhy() : '';
     s.engine = engine;
-    Log.info('player', 'try ' + c.label + ' (' + (c.hls ? (engine === 'hlsjs' ? 'hls.js' : 'hls') : 'mp4') + ')' + (at > 0 ? ' at ' + Math.round(at) : '') + (why ? ' after ' + why : ''));
+    Log.info('player', 'try ' + c.label + ' (' + (c.hls ? (engine === 'hlsjs' ? 'hls.js' + (whyHls && !s.saidWhy ? ': ' + whyHls : '') : 'hls') : 'mp4') + ')' +
+      (at > 0 ? ' at ' + Math.round(at) : '') + (why ? ' after ' + why : ''));
+    if (whyHls) s.saidWhy = true;
     if (!s.started) setStatus(s, i === 0 ? 'Starting playback\u2026' : 'Trying another stream\u2026');
     else setBuffering(s, true);
     var v = ui.video;
     destroyHls();
     try { v.pause(); } catch (e) {}
     mark(s, 'src');
+    renderBadges(s);
+    s.btnSig = '';
     if (engine === 'hlsjs') {
+      /* The candidate's clocks start once hls.js is there (a slow script load is not the stream's fault; each copy
+         has hlsLoadTimeout and startBudget bounds the whole start). */
       hlsReady(safe(s, function (err, H) {
         if (s.tryId !== tryId || s.state === 'error') return;
         if (err || !H) {
           /* No hls.js here: a stream the platform player already refused fails as it did; others play natively. */
           s.engine = 'native';
           if (c.afterNative) { s.failNote = 'hls.js unavailable'; candidateFailed(s, tryId, c.nativeReason || 'media-4'); return; }
-          nativeSrc(s, c, tryId);
+          if (nativeSrc(s, c, tryId)) armCandidate(s);
           return;
         }
-        alive(s);
         hlsAttach(s, c, H, at, tryId);
+        if (s.tryId === tryId && s.state !== 'error') armCandidate(s);
       }, 'player-hls'));
-    } else if (!nativeSrc(s, c, tryId)) return;
-    armCandidate(s);
-    renderBadges(s);
-    s.btnSig = '';
+      return;
+    }
+    if (nativeSrc(s, c, tryId)) armCandidate(s);
   }
 
   function nativeSrc(s, c, tryId) {
@@ -1228,11 +1405,22 @@ var NativePlayer = (function () {
     var tryId = s.tryId;
     s.candStart = U.now();
     s.lastBuf = 0;
+    s.lastReady = -1;
     armQuiet(s);
     later(s, 'candmax', function () {
       if (s.tryId !== tryId || s.playedTry === tryId || s.blocked || (s.ready && s.userPaused)) return;
       candidateFailed(s, tryId, s.ready ? 'no-start' : 'timeout');
     }, CFG.candidateMax);
+    if (s.engine !== 'hlsjs') later(s, 'poll', function () { pollLife(s, tryId); }, 2000);
+  }
+
+  /* An original file tried as a last resort (no HLS rendition left to try) gets fileTimeout of quiet time: a large
+     file's player can take long to read its index, and failing it only leads to the error card. */
+  function quietFor(s) {
+    var c = s.cands[s.ci];
+    if (!c || c.hls || !isTV()) return CFG.candidateTimeout;
+    for (var i = s.ci + 1; i < s.cands.length; i++) if (s.cands[i].hls) return CFG.candidateTimeout;
+    return Math.max(CFG.candidateTimeout, CFG.fileTimeout);
   }
 
   function armQuiet(s) {
@@ -1240,13 +1428,24 @@ var NativePlayer = (function () {
     later(s, 'cand', function () {
       if (s.tryId !== tryId || s.playedTry === tryId || s.blocked || (s.ready && s.userPaused)) return;
       candidateFailed(s, tryId, s.ready ? 'no-start' : 'timeout');
-    }, CFG.candidateTimeout);
+    }, quietFor(s));
   }
 
   /* A starting candidate showed a sign of life: its quiet-time limit starts again. */
   function alive(s) {
+    s.lifeAt = U.now();
     if (s.playedTry === s.tryId || !s.timers.cand || s.state === 'error') return;
     armQuiet(s);
+  }
+
+  /* The platform player (native candidates) may fire no 'progress' while it reads a file: every 2 s before the first
+     frame, more buffered data or a higher readyState also counts as life. */
+  function pollLife(s, tryId) {
+    if (s.tryId !== tryId || s.playedTry === tryId || s.state === 'error' || !ui) return;
+    var v = ui.video, b = bufferedEnd(v), r = v.readyState || 0;
+    if (b > s.lastBuf + 0.25 || (s.lastReady >= 0 && r > s.lastReady)) { if (b > s.lastBuf) s.lastBuf = b; alive(s); }
+    s.lastReady = r;
+    later(s, 'poll', function () { pollLife(s, tryId); }, 2000);
   }
 
   /* Format errors: the platform player rejected the stream itself (not the network). */
@@ -1273,6 +1472,9 @@ var NativePlayer = (function () {
       return;
     }
     if (c && !c.synthetic) { s.failed[c.label] = true; s.fails.push({ label: c.label, reason: reason }); }
+    /* AUTO through hls.js too slow to deliver (it starts on the best rendition): the 1080p address is the same video,
+       so the lighter renditions go next. */
+    if (c && viaHls && c.label === 'AUTO' && /^(?:timeout|stall|no-start)$/.test(reason)) lighterFirst(s);
     if (s.started && s.ready && !(c && c.synthetic) && !s.switching) {
       report(s, 'switch');
       s.switchNote = 'Playback hiccup \u2014 switched to a backup stream';
@@ -1281,6 +1483,17 @@ var NativePlayer = (function () {
        so the MP4 originals go next. */
     if (c && c.hls && !c.synthetic && s.playedTry !== s.tryId && formatError(reason)) promoteFiles(s);
     startCandidate(s, s.ci + 1, at, reason);
+  }
+
+  /* After a slow AUTO: the remaining renditions up to 720p (720p, then 360p) before the heavier ones (1080p, 4K);
+     original files after them. */
+  function lighterFirst(s) {
+    var head = s.cands.slice(0, s.ci + 1), rest = s.cands.slice(s.ci + 1), light = [], heavy = [], files = [];
+    U.each(rest, function (c) { if (!c.hls) files.push(c); else if (rank(c.label) > 0 && rank(c.label) <= 720) light.push(c); else heavy.push(c); });
+    if (!light.length || !heavy.length || U.indexOf(rest, light[0]) < U.indexOf(rest, heavy[0])) return;
+    light.sort(function (a, b) { return rank(b.label) - rank(a.label); });
+    Log.info('player', 'AUTO was too slow: ' + U.map(light, function (c) { return c.label; }).join(', ') + ' next');
+    s.cands = head.concat(light, heavy, files);
   }
 
   function promoteFiles(s) {
@@ -1426,15 +1639,19 @@ var NativePlayer = (function () {
       var d = dur(), at = s.pendingAt;
       if (d > 0) s.lastDur = d;
       s.pendingAt = 0;
+      var check = -1, h = hlsOf(s);
       if (s.resumePending) {
         s.resumePending = false;
-        if (at > 10 && d > 0 && at < d - 60) { mark(s, 'seek'); seekTo(s, at); s.resumed = at; } else {
+        if (at > 10 && d > 0 && at < d - 60) { mark(s, 'seek'); seekTo(s, at); s.resumed = at; check = at; } else {
           s.lastTime = 0;
-          if (ui.video.currentTime > 1) seekTo(s, 0); /* hls.js may have started at the saved position */
+          /* hls.js was given the saved position as its startPosition and jumps there once its first fragment is
+             buffered (the time is still 0 now): seeking to 0 first makes it start at 0, and the check below undoes
+             a late jump. */
+          if (h) { seekTo(s, 0); check = 0; } else if (ui.video.currentTime > 1) seekTo(s, 0);
         }
-      } else if (at > 0 && d > 0) seekTo(s, Math.min(at, d - 1));
+      } else if (at > 0 && d > 0) { seekTo(s, Math.min(at, d - 1)); check = s.lastTime; }
       /* Native HLS players can ignore a seek made this early (and start at 0): checked once it plays. */
-      s.seekCheck = s.lastTime > 1 ? { target: s.lastTime, tries: 0, at: U.now() } : null;
+      s.seekCheck = check > 1 || (check === 0 && h) ? { target: check, tries: 0, at: U.now() } : null;
       if (s.blocked) reveal(s);
       alive(s);
       audioRefresh(s);
@@ -1493,10 +1710,7 @@ var NativePlayer = (function () {
       /* Also before the first frame: a stream that stops delivering data is replaced after stallTimeout. */
       setBuffering(s, true);
       s.waitAt = pos(s);
-      var tryId = s.tryId;
-      later(s, 'stall', function () {
-        if (s.buffering && s.tryId === tryId && Math.abs(pos(s) - s.waitAt) < 0.5 && !paused()) candidateFailed(s, tryId, 'stall');
-      }, CFG.stallTimeout);
+      armStall(s, s.tryId, U.now());
     });
     on('timeupdate', function (s) {
       if (!s.ready) return;
@@ -1535,6 +1749,17 @@ var NativePlayer = (function () {
       if (!v2 || !v2.getAttribute('src')) return;
       candidateFailed(s, s.tryId, 'media-' + code);
     });
+  }
+
+  /* A 'waiting' that lasts stallTimeout without the position moving fails the stream. Before its first frame a stream
+     that keeps showing signs of life (hls.js fragments arriving on a slow connection) is still starting, not stalled:
+     the candidate's own clocks (quiet time, candidateMax) judge it. */
+  function armStall(s, tryId, since) {
+    later(s, 'stall', function () {
+      if (!s.buffering || s.tryId !== tryId || Math.abs(pos(s) - s.waitAt) >= 0.5 || paused()) return;
+      if (s.playedTry !== tryId && (s.lifeAt || 0) > since) { armStall(s, tryId, U.now()); return; }
+      candidateFailed(s, tryId, 'stall');
+    }, CFG.stallTimeout);
   }
 
   function bufferedEnd(v) {
@@ -1846,6 +2071,7 @@ var NativePlayer = (function () {
     U.empty(ui.btns);
     U.empty(ui.errBtns);
     U.empty(ui.badges);
+    ui.badges.__sig = '';
     U.empty(ui.subsBox);
     flag(ui.subs, 'is-on', false);
     r.setAttribute('data-subsize', subSize());
@@ -2981,6 +3207,8 @@ var NativePlayer = (function () {
     var d = dur();
     if (!(d > 0)) return;
     var t = pos(s), at = upNextAt(s, d);
+    /* The next episode's file list, read ahead a little before the card shows (Play now / autoplay skip it). */
+    if (!s.nextFilesAsked && t >= at - 90) { s.nextFilesAsked = true; prefetchFiles(s.id, s.next.season, s.next.episode, 'up next'); }
     if (s.upnext && s.upnext.visible) {
       if (!s.upnext.ended && t < at - 5) hideUpNext(s, false);
       return;
@@ -3335,12 +3563,24 @@ var NativePlayer = (function () {
 
   function info() { return S ? snapshot(S) : null; }
 
+  /* Before Play (a title page opened, Home idle): loads hls.js when HLS will play through it here and, for an
+     episode, reads its file list ahead. opts {why, kind, id, season, episode}. Never requests player data. */
+  function warm(opts) {
+    opts = opts || {};
+    var why = U.text(opts.why || 'idle').slice(0, 24) || 'idle';
+    var engine = warmStart(why, false);
+    if (opts.kind === 'tv' && !ui) prefetchFiles(opts.id, opts.season, opts.episode, why);
+    return { engine: engine ? 'hls.js' : 'native', hls: lib.state };
+  }
+
   function configure(opts) {
     if (opts) for (var k in opts) if (opts.hasOwnProperty(k) && CFG.hasOwnProperty(k) && typeof opts[k] === 'number' && opts[k] >= 0) CFG[k] = opts[k];
     if (opts && typeof opts.tvOrder === 'string') tvOrder = opts.tvOrder;
     if (opts && /^(?:auto|hlsjs|native)$/.test(String(opts.hlsEngine || ''))) hlsMode = opts.hlsEngine;
     if (opts && typeof opts.hlsCdn === 'string' && (opts.hlsCdn === '' || /^https?:\/\//i.test(opts.hlsCdn))) hlsCdn = opts.hlsCdn;
-    var out = { tvOrder: tvOrder, hlsEngine: hlsMode, hlsCdn: hlsCdn, hls: { state: lib.state, version: lib.version, from: lib.from, verdict: verdict() } };
+    if (opts && /^(?:auto|1080p|720p|360p)$/.test(String(opts.hlsStart || ''))) hlsStart = opts.hlsStart;
+    var out = { tvOrder: tvOrder, hlsEngine: hlsMode, hlsCdn: hlsCdn, hlsStart: hlsStart,
+      hls: { state: lib.state, version: lib.version, from: lib.from, verdict: verdict(), engine: hlsjsWhy(), bandwidth: lastBandwidth(), hosts: streamHosts() } };
     for (var c in CFG) if (CFG.hasOwnProperty(c)) out[c] = CFG[c];
     return out;
   }
@@ -3361,6 +3601,7 @@ var NativePlayer = (function () {
     stop: guarded('stop', stop, false),
     info: guarded('info', info, null),
     configure: guarded('configure', configure, null),
+    warm: guarded('warm', warm, null),
     /* Pure helpers, exposed for tests and diagnostics. */
     _parse: guarded('parse', parse, null),
     _order: guarded('order', order, []),
