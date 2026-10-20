@@ -280,8 +280,9 @@ var App = (function () {
     var su = Screens.siteUrl;
     if (name === 'home') navRoot('home', {}, 'home');
     else if (name === 'search') navRoot('search', {}, 'search');
-    else if (name === 'movies') navRoot('browse', { url: su('movies', [], '/movie'), title: 'Movies', kicker: 'Browse', nav: 'movies' }, 'movies');
-    else if (name === 'shows') navRoot('browse', { url: su('shows', [], '/tvshow'), title: 'TV Shows', kicker: 'Browse', nav: 'shows' }, 'shows');
+    /* Movies and TV Shows carry the filter bar; the filters chosen there are kept for the session (Filters). */
+    else if (name === 'movies') navRoot('browse', { url: su('movies', [], '/movie'), title: 'Movies', kicker: 'Browse', nav: 'movies', filterKind: 'movie', remember: true }, 'movies');
+    else if (name === 'shows') navRoot('browse', { url: su('shows', [], '/tvshow'), title: 'TV Shows', kicker: 'Browse', nav: 'shows', filterKind: 'tv', remember: true }, 'shows');
     else if (name === 'library') {
       var lib = su('library', [], '/index/index/my_box');
       navRoot('browse', { url: lib, title: 'My Library', kicker: 'Your titles', nav: 'library', tabs: [
@@ -798,7 +799,7 @@ var App = (function () {
   }
 
   function labelEpisode(label) {
-    var m = /S(\d+)\s*E(\d+)/i.exec(String(label || ''));
+    var m = /S(\d+)\s*:?\s*E(\d+)/i.exec(String(label || ''));   /* "S37E21", the mobile page's "S1:E1" */
     return m && +m[1] > 0 && +m[2] > 0 ? { season: +m[1], episode: +m[2] } : null;
   }
 

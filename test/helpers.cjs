@@ -60,10 +60,12 @@ function makeRunner(name) {
   return {
     test: (title, fn) => cases.push({ title, fn }),
     run: async () => {
+      const only = process.env.ONLY || '';
       for (const c of cases) {
+        if (only && c.title.indexOf(only) < 0) continue;
         const t0 = Date.now();
         try { await c.fn(); passed++; console.log(`  ok   ${c.title} (${Date.now() - t0}ms)`); }
-        catch (e) { failed++; console.log(`  FAIL ${c.title}\n       ${String(e && e.stack || e).split('\n').slice(0, 6).join('\n       ')}`); }
+        catch (e) { failed++; console.log(`  FAIL ${c.title}\n       ${String(e && e.stack || e).split('\n').slice(0, process.env.FULL ? 80 : 6).join('\n       ')}`); }
       }
       console.log(`${name}: ${passed} passed, ${failed} failed`);
       if (failed) process.exitCode = 1;

@@ -811,6 +811,45 @@ t.test('thumb and original: real URL round trip, width and quality, host-indepen
   assert.deepStrictEqual(page.errors, []);
 });
 
+t.test('movie detail, mobile layout (what TV user agents get): facts, backdrop from the style rule, files from #file_bg', async () => {
+  await at('/movie/40102');
+  const html = fixture('movie-mobile.html');
+  const d = await page.evaluate(({ h, o }) => window.__data.Site.detail(new DOMParser().parseFromString(h, 'text/html'), o + '/movie/5806'), { h: html, o: origin });
+  assert.ok(d && !d.partial, 'a full parse');
+  assert.strictEqual(d.title, 'The Godfather');
+  assert.strictEqual(d.year, '1972');
+  assert.strictEqual(d.runtime, '175 min');
+  assert.strictEqual(d.certification, 'R');
+  assert.deepStrictEqual(d.genres, ['Crime', 'Drama']);
+  assert.deepStrictEqual(d.ratings, { imdb: '9.2', tomato: '97%', audience: '98%' });
+  assert.ok(/^Spanning the years 1945 to 1955/.test(d.overview), d.overview);
+  assert.strictEqual(d.backdropOriginal, 'https://image.tmdb.org/t/p/original/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg');
+  assert.strictEqual(d.backdrop, 'https://image.tmdb.org/t/p/w1280/tSPT36ZKlP2WVHJLM4cQPLSzv3b.jpg');
+  assert.deepStrictEqual(d.badges, ['4K HDR', '4K', 'Blu-ray']);
+  assert.deepStrictEqual(d.sources.map(x => [x.quality, x.file, x.size, x.date, x.url]), [
+    ['1080p', 'The.Godfather.1972.1080p.BrRip.x264.BOKUTOX.YIFY.mp4', '2.44 GB', '6/16/2020', '/index/index/player?mfid=36841'],
+    ['4K', 'The.Godfather.1972.2160p.UHD.BluRay.x265.10bit.HDR.TrueHD.5.1-RARBG.mkv', '14.7 GB', '2/24/2023', '/index/index/player?mfid=2199545'],
+    ['1080p', 'The.Godfather.1972.1080p.BrRip.x264.BOKUTOX.YIFY.mp4', '2.4 GB', '2/27/2026', '/index/index/player?mfid=2362651']
+  ]);
+  // The same page's cast (`.actor > div`, the mobile cast markup): every person with their actor page link.
+  assert.deepStrictEqual(d.cast.map(c => [c.name, c.character, c.job, c.href.replace(origin, '')]), [
+    ['Francis Ford Coppola', 'directed by', 'Director', '/actor/37629'],
+    ['Mario Puzo', 'screenplay by', 'Writer', '/actor/9675'],
+    ['Robert Towne', 'Story Editor', 'Writer', '/actor/63599'],
+    ['Marlon Brando', 'Don Vito Corleone', 'Actor', '/actor/30685'],
+    ['Al Pacino', 'Michael Corleone', 'Actor', '/actor/59900'],
+    ['James Caan', 'Sonny Corleone', 'Actor', '/actor/12741'],
+    ['Richard S. Castellano', 'Clemenza as Richard Castellano', 'Actor', '/actor/417593'],
+    ['Robert Duvall', 'Tom Hagen', 'Actor', '/actor/14655']
+  ]);
+  assert.ok(d.cast.every(c => /^https?:\/\//.test(c.image)), 'cast pictures from the avatar backgrounds');
+  // The mobile show page's resume label reads "CONTINUE S1:E1".
+  const tv = await page.evaluate(({ h, o }) => window.__data.Site.detail(new DOMParser().parseFromString(h, 'text/html'), o + '/tvshow/556?season=2'),
+    { h: fixture('tvshow.html').replace('<span style="color: #fff;">PLAY</span>', '<span style="color: #fff;">CONTINUE S3:E5</span>'), o: origin });
+  assert.deepStrictEqual(tv.nextEpisode, { season: 3, episode: 5, code: 'S3E5', resume: true });
+  assert.deepStrictEqual(page.errors, []);
+});
+
 t.test('tv seasons: specials merge in as name-only episodes; resume labels, all-watched and missing lists pick the next episode', async () => {
   await at('/movie/40102');
   const html = fixture('tvshow.html');

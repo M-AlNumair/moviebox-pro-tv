@@ -39,15 +39,22 @@ var Screens = (function () {
   /* A title the viewer rests on in a grid or row is prefetched after Kit.timing('dwell'), like Home's hero (one request
      at a time, the newest wins: Api.prefetch), so OK opens its detail screen with the page already read. */
   var restTimer = null;
-  function prefetchOnRest(item) {
+  /* card (optional): a card whose page named no title (a person's lists) learns it from the prefetched page. */
+  function prefetchOnRest(item, card) {
     clearTimeout(restTimer);
     restTimer = null;
     if (!item || !item.id) return;
     var dwell = 450;
     try { if (typeof Kit.timing === 'function') dwell = Kit.timing('dwell') || 450; } catch (e) { dwell = 450; }
+    var learn = card && !item.title ? function (err, d) {
+      var t = d && d.title;
+      if (!t) { try { var c = Api.cached(item.kind, item.id); t = c && c.title; } catch (e) {} }
+      if (!t) { var m = meta(item.key); t = m && m.title; }
+      if (t) Kit.setCardTitle(card, t);
+    } : null;
     restTimer = U.later(function () {
       restTimer = null;
-      try { if (typeof Api !== 'undefined' && Api.prefetch) Api.prefetch(item); } catch (e) { Log.warn('prefetch', e); }
+      try { if (typeof Api !== 'undefined' && Api.prefetch) Api.prefetch(item, learn || undefined); } catch (e) { Log.warn('prefetch', e); }
     }, dwell, 'rest-prefetch');
   }
 
@@ -1041,6 +1048,8 @@ var Screens = (function () {
           var c = el('div', 'mb-person', null, cr.track);
           Kit.focusable(c, 'cast|' + p.name);
           c.__person = p;
+          var pid = p.href ? site('personId', [p.href], '') : '';
+          if (pid) c.setAttribute('data-person', pid);
           el('div', 'mb-person-name', p.name, c);
           el('div', 'mb-person-role', U.titleCase(p.role || '') || '\u00a0', c);
         });
@@ -1192,7 +1201,7 @@ var Screens = (function () {
         return true;
       }
       if (node && node.__item) { App.push('detail', { kind: node.__item.kind, id: node.__item.id, item: compactItem(node.__item) }); return true; }
-      if (node && node.__person) { App.push('search', { query: node.__person.name, submit: true }); return true; }
+      if (node && node.__person) { openPerson(node.__person); return true; }
       return false;
     };
 
@@ -1220,6 +1229,14 @@ var Screens = (function () {
     return s;
   };
 
+  /* A cast entry or a people result: the person's screen when the website names their page, else a title search for
+     the name (older markup). */
+  function openPerson(p) {
+    var id = p && (p.id || (p.href ? site('personId', [p.href], '') : ''));
+    if (id) App.push('browse', Filters.personParams({ id: id, name: p.name, image: p.image, movies: p.movies, shows: p.shows, job: p.job }));
+    else if (p && p.name) App.push('search', { query: p.name, submit: true });
+  }
+
   /* ---------- Search ---------- */
 
   var KEYS = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -1227,7 +1244,7 @@ var Screens = (function () {
   registry.search = function (params) {
     var s = base('search', 'search');
     s.nav = 'search';
-    var q = U.text(params.query || '').slice(0, 80), type = params.type || 'all';
+    var q = U.text(params.query || '').slice(0, 80), type = /^(?:all|movie|tv|actor)$/.test(params.type || '') ? params.type : 'all';
     var results = null, page = 1, next = '', loadingMore = false, searchSeq = 0, sugSeq = 0, total = null, capped = false;
     var MAX_RESULTS = 600, MAX_SUGGEST = 6;
     var left = el('div', 'mb-search-left', null, s.el);
@@ -1237,7 +1254,7 @@ var Screens = (function () {
     var queryEl = el('span', null, '', qt);
     queryEl.id = 'mbptv-query';
     el('span', 'mb-caret', null, qt);
-    el('span', 'mb-placeholder', 'Search movies and shows', line);
+    var placeholder = el('span', 'mb-placeholder', '', line);
     var kb = Kit.zone(el('div', 'mb-keyboard', null, left), 'keyboard');
     var firstKey = null;
     U.each(KEYS.split(''), function (ch) {
@@ -1266,8 +1283,11 @@ var Screens = (function () {
     var headTitle = el('div', 'mb-section', '', head);
     var headCount = el('div', 'mb-count', '', head);
     var tabs = Kit.zone(el('div', 'mb-chiprow mb-search-tabs', null, right), 'tabs');
-    U.each([['all', 'All'], ['movie', 'Movies'], ['tv', 'TV Shows']], function (t) {
-      var c = Kit.chip(t[1], { key: 'type|' + t[0], parent: tabs });
+    /* What the next search looks for: titles (All / Movies / TV Shows, the search page) or People (the website's own
+       actor search). The tabs show in every view, so People can be chosen before typing; outside the results,
+       choosing a tab never fetches anything (every search fetch is saved in the account's search history). */
+    U.each([['all', 'All'], ['movie', 'Movies'], ['tv', 'TV Shows'], ['actor', 'People']], function (t) {
+      var c = Kit.chip(t[1], { key: 'type|' + t[0], parent: tabs, icon: t[0] === 'actor' ? 'user' : null });
       c.setAttribute('data-type', t[0]);
     });
     var gport = el('div', 'mb-grid-port', null, right);
@@ -1276,7 +1296,8 @@ var Screens = (function () {
     var sugBox = el('div', 'mb-suggest-box', null, right);
     var sug = Kit.zone(el('div', 'mb-suggest', null, sugBox), 'list');
     var sugHint = el('div', 'mb-suggest-hint', 'Keep typing, or choose Search to see every result.', sugBox);
-    var discover = el('div', 'mb-discover', null, right);
+    var dport = el('div', 'mb-discover-port', null, right);
+    var discover = el('div', 'mb-discover', null, dport);
 
     /* The right side shows one of: results (the submitted query is the one on screen), suggestions (a query is typed)
        or discovery (recent and trending searches, for an empty query). Results stay in memory while the viewer edits
@@ -1287,15 +1308,18 @@ var Screens = (function () {
       return t ? 'suggest' : 'discover';
     }
 
+    function people() { return type === 'actor'; }
+
     function layout() {
       var mode = showing();
       gport.style.display = mode === 'results' ? '' : 'none';
-      tabs.style.display = mode === 'results' ? '' : 'none';
       sugBox.style.display = mode === 'suggest' ? '' : 'none';
-      discover.style.display = mode === 'discover' ? '' : 'none';
+      dport.style.display = mode === 'discover' ? '' : 'none';
       sugHint.style.display = sug.firstChild ? 'none' : '';
+      sugHint.textContent = people() ? 'Choose Search to find people named \u201c' + U.text(q) + '\u201d.' : 'Keep typing, or choose Search to see every result.';
+      placeholder.textContent = people() ? 'Search people by name' : 'Search movies and shows';
       if (mode === 'results') headFor(results.query, total);
-      else if (mode === 'suggest') { headTitle.textContent = 'Suggestions'; headCount.textContent = ''; }
+      else if (mode === 'suggest') { headTitle.textContent = people() ? 'People' : 'Suggestions'; headCount.textContent = ''; }
       else { headTitle.textContent = 'Find something to watch'; headCount.textContent = ''; }
       /* Focus left on a control the new view hides goes back to the keyboard. */
       var cur = Focus.current();
@@ -1317,7 +1341,8 @@ var Screens = (function () {
     var suggestSoon = U.debounce(function () { fetchSuggest(); }, 350);
     function scheduleSuggest() {
       sugSeq++;
-      if (!U.text(q)) { suggestSoon.cancel(); renderSuggestions([]); return; }
+      /* The website suggests titles only: People searches skip suggestions. */
+      if (!U.text(q) || people()) { suggestSoon.cancel(); renderSuggestions([]); return; }
       suggestSoon();
     }
 
@@ -1366,11 +1391,28 @@ var Screens = (function () {
     }
 
     /* Rebuilding the chips (when the website's own lists arrive) keeps focus on the same chip when it still exists. */
+    /* Quick ways in without typing: a genre or a year opens Movies (TV Shows when that tab is chosen) filtered by it. */
+    function browseChips(title, list, zoneName, kind) {
+      el('div', 'mb-section', title, discover);
+      var row = Kit.zone(el('div', 'mb-chiprow', null, discover), zoneName);
+      U.each(list, function (b) {
+        var c = Kit.chip(b.label, { key: zoneName + '|' + b.label, parent: row });
+        c.setAttribute('data-browse', b.label);
+        c.__browse = { kind: kind, label: b.label, filters: b.filters };
+      });
+    }
+
+    var discoverLists = { recent: [], trending: [] };
     function fillDiscover(recent, trending) {
+      discoverLists = { recent: recent || [], trending: trending || [] };
       var cur0 = Focus.current(), key0 = cur0 && discover.contains(cur0) ? Focus.keyOf(cur0) : '';
       U.empty(discover);
-      el('div', 'mb-discover-hint', 'Type with the keyboard or the remote\u2019s number keys. Suggestions appear as you type.', discover);
+      Kit.setY(discover, 0);
+      el('div', 'mb-discover-hint', people() ? 'Type a name, then choose Search to find people.' : 'Type with the keyboard or the remote\u2019s number keys. Suggestions appear as you type.', discover);
       chips('Recent searches', recent, 'chips:recent');
+      var kind = type === 'tv' ? 'tv' : 'movie', quick = Filters.quick(kind), what = kind === 'tv' ? 'TV shows' : 'movies';
+      browseChips('Browse ' + what + ' by genre', quick.genres, 'chips:genre', kind);
+      browseChips('Browse ' + what + ' by year', quick.years, 'chips:year', kind);
       chips('Trending now', trending || [], 'chips:trending');
       if (key0) App.focus(Focus.byKey(discover, key0) || firstKey);
     }
@@ -1395,8 +1437,9 @@ var Screens = (function () {
     }
 
     function headFor(query, count) {
-      headTitle.textContent = 'Results for \u201c' + query + '\u201d';
-      headCount.textContent = count == null ? '' : count === 1 ? '1 title' : count + ' titles';
+      headTitle.textContent = (results && results.people ? 'People named \u201c' : 'Results for \u201c') + query + '\u201d';
+      if (results && results.people) headCount.textContent = count == null || next ? '' : count === 1 ? '1 person' : count + ' people';
+      else headCount.textContent = count == null ? '' : count === 1 ? '1 title' : count + ' titles';
     }
 
     function showResultsLoading() {
@@ -1408,8 +1451,20 @@ var Screens = (function () {
     }
 
     function addCards(items) {
-      U.each(items, function (it) { grid.appendChild(Kit.card(it, { size: 'poster', zone: 'grid', sub: true })); });
+      U.each(items, function (it) { grid.appendChild(results && results.people ? Filters.personCard(it) : Kit.card(it, { size: 'poster', zone: 'grid', sub: true })); });
       Kit.lazySoon(s.el);
+    }
+
+    /* People results: only well-formed entries, once each (sessionStorage snapshots come back through here too). */
+    function normPeople(list) {
+      var out = [], seen = {};
+      U.each(list || [], function (p) {
+        if (!p || !/^\d+$/.test(String(p.id || '')) || !p.name || seen[p.id]) return;
+        seen[p.id] = true;
+        out.push({ id: String(p.id), key: 'person:' + p.id, name: U.text(p.name), image: Kit.safeImage(p.image) ? p.image : '',
+          movies: typeof p.movies === 'number' ? p.movies : -1, shows: typeof p.shows === 'number' ? p.shows : -1 });
+      });
+      return out;
     }
 
     /* Paging stops at 600 titles (memory and key cost stay bounded on the TV); the website has the rest. */
@@ -1426,16 +1481,17 @@ var Screens = (function () {
       opts = opts || {};
       if (text != null) setQuery(text, false);
       var query = U.text(q);
-      if (!query) { App.toast('Type a title first'); return; }
+      if (!query) { App.toast(people() ? 'Type a name first' : 'Type a title first'); return; }
       suggestSoon.cancel();
       sugSeq++;
       var mine = ++searchSeq;
       var from = Focus.current();
       if (from && (grid.contains(from) || sugBox.contains(from) || discover.contains(from))) App.focus(go);
-      results = { query: query, type: type, items: [] };
+      results = { query: query, type: type, items: [], people: people() };
       page = 1; next = ''; total = null; capped = false;
       showResultsLoading();
       var submitFrom = Focus.current();
+      if (results.people) { submitPeople(query, mine, submitFrom, opts); return; }
       api('search', [query, type, 1], function (err, r) {
         if (!s.alive || mine !== searchSeq) return;
         U.empty(grid);
@@ -1449,7 +1505,8 @@ var Screens = (function () {
         var items = normItems(r && r.items);
         results.items = items;
         next = r && r.next || '';
-        total = r && typeof r.total === 'number' ? r.total : items.length;
+        /* The mobile layout names no total: the count shows once every page is in. */
+        total = r && typeof r.total === 'number' ? r.total : next ? null : items.length;
         if (showing() === 'results') headFor(query, total);
         if (!items.length) {
           stateBlock(grid, { icon: 'search', title: 'No matches for \u201c' + query + '\u201d',
@@ -1469,9 +1526,63 @@ var Screens = (function () {
       });
     }
 
+    /* People: the website's actor search (Api.people), 10 per page; OK on a person opens their titles. */
+    function submitPeople(query, mine, submitFrom, opts) {
+      api('people', [query, 1], function (err, r) {
+        if (!s.alive || mine !== searchSeq) return;
+        U.empty(grid);
+        if (err) {
+          if (err.code === 'signed-out') { fail(s, err); return; }
+          if (showing() === 'results') headFor(query, null);
+          stateBlock(grid, { icon: 'info', title: 'People search didn\u2019t load', text: errorMessage(err),
+            actions: [{ label: 'Try again', icon: 'reload', action: 'search-retry', primary: true }] }, 'buttons');
+          return;
+        }
+        var items = normPeople(r && r.items);
+        results.items = items;
+        next = r && r.next ? 'more' : '';
+        total = items.length;
+        if (showing() === 'results') headFor(query, total);
+        if (!items.length) {
+          stateBlock(grid, { icon: 'user', title: 'No people named \u201c' + query + '\u201d',
+            text: 'Check the spelling, or try the last name only.',
+            actions: [{ label: 'Search titles instead', icon: 'search', action: 'search-titles', primary: true }] }, 'buttons');
+          return;
+        }
+        addCards(items);
+        var now = Focus.current();
+        if (opts.focus && showing() === 'results' && (!now || now === submitFrom || !Focus.shown(now) || tabs.contains(now))) {
+          var f = Focus.firstIn(grid);
+          if (f) App.focus(f);
+        }
+        App.saveState();
+      });
+    }
+
+    function loadMorePeople() {
+      loadingMore = true;
+      var mine = searchSeq, query = results.query;
+      api('people', [query, page + 1], function (err, r) {
+        loadingMore = false;
+        if (!s.alive || mine !== searchSeq) return;
+        if (err) { App.toast('Couldn\u2019t load more people'); return; }
+        page++;
+        next = r && r.next ? 'more' : '';
+        var have = {};
+        U.each(results.items, function (p) { have[p.id] = true; });
+        var fresh = U.filter(normPeople(r && r.items), function (p) { return !have[p.id]; });
+        if (!fresh.length) next = '';
+        results.items = results.items.concat(fresh);
+        total = results.items.length;
+        addCards(fresh);
+        if (showing() === 'results') headFor(query, total);
+      });
+    }
+
     function loadMore() {
       if (!next || loadingMore || !results || capped) return;
       if (results.items.length >= MAX_RESULTS) { capNote(); return; }
+      if (results.people) { loadMorePeople(); return; }
       loadingMore = true;
       var mine = searchSeq, query = results.query;
       api('search', [query, type, page + 1], function (err, r) {
@@ -1485,13 +1596,15 @@ var Screens = (function () {
         var fresh = U.filter(normItems(r && r.items), function (it) { return !have[it.key]; });
         results.items = results.items.concat(fresh);
         addCards(fresh);
+        if (total == null && !next) { total = results.items.length; if (showing() === 'results') headFor(query, total); }
       });
     }
 
     function restoreSnapshot(snap) {
       if (!snap || !snap.items || !snap.items.length) return false;
-      q = snap.query; type = snap.type || 'all'; renderQuery();
-      results = { query: U.text(snap.query), type: type, items: normItems(snap.items) };
+      q = snap.query; type = /^(?:all|movie|tv|actor)$/.test(snap.type || '') ? snap.type : 'all'; renderQuery();
+      results = { query: U.text(snap.query), type: type, people: !!snap.people };
+      results.items = results.people ? normPeople(snap.items) : normItems(snap.items);
       next = snap.next || ''; page = snap.page || 1; total = snap.total;
       showResultsLoading();
       U.empty(grid);
@@ -1503,7 +1616,8 @@ var Screens = (function () {
     s.snapshot = function () {
       var p = { query: q, type: type };
       if (results && results.items.length) {
-        p.snap = { query: results.query, type: type, next: next, page: page, total: total, items: U.map(results.items.slice(0, 60), compactItem) };
+        p.snap = { query: results.query, type: results.type, next: next, page: page, total: total, people: !!results.people,
+          items: results.people ? results.items.slice(0, 60) : U.map(results.items.slice(0, 60), compactItem) };
       }
       return p;
     };
@@ -1520,10 +1634,12 @@ var Screens = (function () {
       U.toggleClass(s.el, 'in-results', inResults);
       if (z && grid.contains(z)) Kit.reveal(grid, gport, node, Kit.em() * 1, Kit.em() * 4);
       prefetchOnRest(z === grid ? node.__item : null);
-      if (z === grid && node.__item) {
+      if (z === grid && (node.__item || node.__person)) {
         var gi = Focus.gridInfo(node);
         if (gi && gi.index >= gi.count - 5) loadMore();
       }
+      /* The discover view scrolls when its rows are taller than the screen. */
+      if (z && discover.contains(z)) Kit.reveal(discover, dport, node, Kit.em() * 3.5, Kit.em() * 2);
     };
 
     /* Back from the results, suggestions or chips returns to the keyboard with the query kept; Back on the keyboard
@@ -1557,14 +1673,31 @@ var Screens = (function () {
       if (action === 'clear') { setQuery(''); return true; }
       if (action === 'search-submit') { submit(null, { focus: true }); return true; }
       if (action === 'search-retry') { submit(null, { focus: true }); return true; }
-      if (action === 'open-website') { App.openWebsite(siteUrl('search', [U.text(q), type, 1], '/index/search?word=' + encodeURIComponent(U.text(q)))); return true; }
+      /* The website's own People tab (type=actor) answered an error page in 2026-10: open its title search instead. */
+      if (action === 'open-website') { App.openWebsite(siteUrl('search', [U.text(q), people() ? 'all' : type, 1], '/index/search?word=' + encodeURIComponent(U.text(q)))); return true; }
       if (node && node.hasAttribute('data-suggestion')) { submit(node.getAttribute('data-suggestion'), { focus: true }); return true; }
       if (node && node.hasAttribute('data-query')) { submit(node.getAttribute('data-query'), { focus: true }); return true; }
+      if (action === 'search-titles') { type = 'all'; submit(null, { focus: true }); return true; }
       if (node && node.hasAttribute('data-type')) {
         var t = node.getAttribute('data-type');
-        if (t !== type || !results) { type = t; if (U.text(q)) submit(null, { focus: false }); else tabsState(); }
+        /* On the results the new tab searches again; elsewhere it only chooses what the next search looks for. */
+        var onResults = showing() === 'results';
+        type = t;
+        tabsState();
+        if (onResults && t !== results.type) submit(null, { focus: false });
+        else {
+          scheduleSuggest();
+          layout();
+          if (showing() === 'discover') fillDiscover(discoverLists.recent, discoverLists.trending);
+        }
         return true;
       }
+      if (node && node.__browse) {
+        var b = node.__browse;
+        App.push('browse', { filterKind: b.kind, filters: b.filters, title: b.label, kicker: b.kind === 'tv' ? 'TV Shows' : 'Movies' });
+        return true;
+      }
+      if (node && node.__person) { openPerson(node.__person); return true; }
       if (node && node.__item) { App.push('detail', { kind: node.__item.kind, id: node.__item.id, item: compactItem(node.__item) }); return true; }
       return false;
     };
@@ -1583,27 +1716,80 @@ var Screens = (function () {
     return s;
   };
 
-  /* ---------- Browse grid (movies, shows, lists, library) ---------- */
+  /* ---------- Browse grid (movies, shows, lists, library, a person's titles) ---------- */
 
+  /* params: {url, title, kicker, nav, tabs, filterKind: 'movie'|'tv' (Movies / TV Shows with the filter bar), filters
+     (a preset, e.g. a genre from Search), remember (the rail's screens: the filters are kept for the session), person
+     ({id, name, image, meta}: a person's titles, tabs Movies / TV Shows)}. */
   registry.browse = function (params, ctx) {
     var s = base('browse', 'browse');
     s.nav = params.nav || '';
-    var url = params.url || siteUrl('movies', [], '/movie');
-    var next = '', loadingMore = false, seq = 0, count = 0, keys = {}, capped = false;
+    var fkind = params.filterKind === 'tv' || params.filterKind === 'movie' ? params.filterKind : '';
+    var filt = fkind ? Filters.norm(params.filters || (params.remember ? Filters.load(fkind) : null)) : null;
+    var fgroups = fkind ? Filters.groups(fkind, null) : null;
+    var minRating = filt && filt.min ? +filt.min : 0;
+    var allUrl = fkind ? Filters.url(fkind, filt) : '';
+    var url = fkind ? allUrl : params.url || siteUrl('movies', [], '/movie');
+    var next = '', loadingMore = false, seq = 0, count = 0, scanned = 0, keys = {}, capped = false;
+    var fill = { pages: 0, shown: 0 }, chipsSeen = null, switchedEmpty = false;
     var vport = el('div', 'mb-vport', null, s.el);
     var vs = el('div', 'mb-vscroll', null, vport);
     var head = el('div', 'mb-browse-head', null, vs);
+    if (params.person && params.person.image) {
+      U.toggleClass(head, 'has-avatar', true);
+      var ava = el('div', 'mb-browse-avatar', null, head);
+      Kit.img(params.person.image, { cls: 'mb-card-img', parent: ava, w: 300, eager: true });
+    }
     el('div', 'mb-kicker', params.kicker || 'Browse', head);
     var titleEl = el('div', 'mb-h1', params.title || '', head);
-    var countEl = el('div', 'mb-meta', '', head);
+    var countEl = el('div', 'mb-meta', params.person && params.person.meta || '', head);
+    var bar = fkind ? Kit.zone(el('div', 'mb-btns mb-filter-bar', null, vs), 'buttons:filters') : null;
     var tabs = Kit.zone(el('div', 'mb-chiprow mb-browse-tabs', null, vs), 'tabs');
     var grid = Kit.zone(el('div', 'mb-grid', null, vs), 'grid');
     var foot = el('div', 'mb-grid-foot', null, vs);
+
+    /* The filter bar: Filter and sort, one pill per active filter (OK opens the sheet on that group), Reset. */
+    function renderBar() {
+      if (!bar) return;
+      var cur = Focus.current(), hadFocus = !!cur && bar.contains(cur), focusKey = hadFocus ? Focus.keyOf(cur) : '';
+      U.empty(bar);
+      var b = Kit.button({ label: 'Filter and sort', icon: 'filter', action: 'filters', parent: bar, key: 'bar|filters' });
+      b.__fgroup = '';
+      U.each(Filters.pills(filt, fgroups), function (p) {
+        var c = Kit.chip(p.label, { key: 'bar|pill|' + p.group + '|' + p.value, parent: bar, cls: 'mb-filter-pill is-selected' });
+        c.setAttribute('data-filter-pill', p.group);
+        c.__fgroup = p.group;
+      });
+      if (!Filters.isEmpty(filt)) Kit.button({ label: 'Reset', icon: 'close', action: 'filters-reset', parent: bar, key: 'bar|reset' });
+      if (hadFocus) App.focus(Focus.byKey(bar, focusKey) || Focus.firstIn(bar));
+    }
+
+    function openFilters(group) {
+      Filters.sheet({ kind: fkind, title: params.title || (fkind === 'tv' ? 'TV Shows' : 'Movies'), groups: fgroups, value: filt, focus: group,
+        onApply: applyFilters });
+    }
+
+    function applyFilters(f) {
+      filt = Filters.norm(f);
+      minRating = filt.min ? +filt.min : 0;
+      if (params.remember) Filters.save(fkind, filt);
+      allUrl = Filters.url(fkind, filt);
+      U.each(U.qsa(tabs, '.mb-chip'), function (c) { if (c.__all) c.__href = allUrl; });
+      renderBar();
+      load(allUrl, true);
+      App.saveState();
+    }
 
     function renderTabs(list, current) {
       U.empty(tabs);
       if (!list || !list.length) { tabs.style.display = 'none'; return; }
       tabs.style.display = '';
+      /* Movies and TV Shows: "All" (the filtered list) comes before the site's own categories. */
+      if (fkind) {
+        var all = Kit.chip(fkind === 'tv' ? 'All shows' : 'All movies', { key: 'tab|__all', parent: tabs });
+        all.__href = allUrl;
+        all.__all = true;
+      }
       U.each(list.slice(0, 16), function (t) {
         var c = Kit.chip(t.label, { key: 'tab|' + t.label, parent: tabs });
         c.__href = t.href || t.url;
@@ -1611,16 +1797,39 @@ var Screens = (function () {
       });
     }
 
+    function passes(it) {
+      if (!minRating) return true;
+      var r = parseFloat(it.rating);
+      return !isNaN(r) && r >= minRating;
+    }
+
+    /* Titles the page names without a title (a person's lists in the mobile layout) take it from the metadata cache. */
+    function named(it) {
+      if (!it.title) { var m = meta(it.key); if (m && m.title) it.title = m.title; }
+      return it;
+    }
+
     function add(items) {
       var fresh = U.filter(normItems(items), function (it) { return !keys[it.key]; });
-      U.each(fresh, function (it) { keys[it.key] = true; grid.appendChild(Kit.card(it, { size: 'grid', zone: 'grid', sub: true })); });
-      count += fresh.length;
+      var shown = 0;
+      U.each(fresh, function (it) {
+        keys[it.key] = true;
+        scanned++;
+        if (!passes(it)) return;
+        shown++;
+        grid.appendChild(Kit.card(named(it), { size: 'grid', zone: 'grid', sub: true }));
+      });
+      count += shown;
+      fill.shown += shown;
       Kit.lazySoon(s.el);
-      return fresh.length;
+      return shown;
     }
 
     function setCount() {
-      countEl.textContent = count && !next ? (count === 1 ? '1 title' : count + ' titles') : '';
+      if (params.person && params.person.meta) { countEl.textContent = params.person.meta; return; }
+      var n = count && !next ? (count === 1 ? '1 title' : count + ' titles') : '';
+      if (minRating && scanned) n = (count === 1 ? '1 title' : count + ' titles') + ' rated ' + minRating + '+ of ' + scanned + ' checked';
+      countEl.textContent = n;
     }
 
     function markTab() {
@@ -1630,10 +1839,11 @@ var Screens = (function () {
         /* Up from the grid lands on the selected chip. */
         if (on) tabs.__mbLast = c;
       });
+      if (bar) U.toggleClass(bar, 'is-off', url !== allUrl);
     }
 
     /* Paging stops at 600 titles (memory and key cost stay bounded on the TV); the website lists the rest. */
-    var MAX_TITLES = 600;
+    var MAX_TITLES = 600, MAX_SCANNED = 1500, FILL_TARGET = 20, FILL_PAGES = 6;
     function capNote() {
       if (capped) return;
       capped = true;
@@ -1644,11 +1854,40 @@ var Screens = (function () {
       Kit.button({ label: 'Open website', icon: 'globe', action: 'open-website', parent: btns, key: 'cap|open-website' });
     }
 
+    /* The minimum IMDb rating is checked on the TV: sorted by IMDb rating, the list ends at the first lower rating;
+       otherwise more pages are read (up to FILL_PAGES in a row) until FILL_TARGET more titles pass. */
+    function afterPage(items) {
+      if (!minRating || url !== allUrl) return false;
+      var last = items && items.length ? items[items.length - 1] : null;
+      if (filt.sort === 'rating' && last && last.rating && parseFloat(last.rating) < minRating) next = '';
+      if (next && fill.shown < FILL_TARGET && fill.pages < FILL_PAGES && scanned < MAX_SCANNED) {
+        fill.pages++;
+        loadMore(true);
+        return true;
+      }
+      return false;
+    }
+
+    function emptyState() {
+      U.empty(grid);
+      if (minRating && url === allUrl && scanned) {
+        stateBlock(grid, { icon: 'star', title: 'No titles rated IMDb ' + minRating + '+ here yet',
+          text: 'Checked ' + scanned + ' titles. Sort by IMDb rating to see the best rated first, or choose a lower minimum.',
+          actions: [{ label: 'Sort by IMDb rating', icon: 'star', action: 'filters-sort-imdb', primary: true }, { label: 'Change filters', icon: 'filter', action: 'filters' }] }, 'buttons');
+      } else if (fkind && url === allUrl && !Filters.isEmpty(filt)) {
+        stateBlock(grid, { icon: 'filter', title: 'Nothing matches these filters', text: 'Try fewer filters, or another year or genre.',
+          actions: [{ label: 'Change filters', icon: 'filter', action: 'filters', primary: true }, { label: 'Reset filters', icon: 'close', action: 'filters-reset' }] }, 'buttons');
+      } else {
+        stateBlock(grid, { icon: 'film', title: 'Nothing here yet', text: 'This list is empty right now. The website may show more.',
+          actions: [{ label: 'Open website', icon: 'globe', action: 'open-website', primary: true }] }, 'buttons');
+      }
+    }
+
     function load(target, keepTabs) {
       var mine = ++seq;
       url = target;
-      next = ''; count = 0; keys = {}; capped = false;
-      countEl.textContent = '';
+      next = ''; count = 0; scanned = 0; keys = {}; capped = false; fill = { pages: 0, shown: 0 };
+      countEl.textContent = params.person && params.person.meta || '';
       markTab();
       U.empty(grid); U.empty(foot);
       Kit.setY(vs, 0);
@@ -1660,18 +1899,26 @@ var Screens = (function () {
         U.empty(grid);
         if (err) {
           if (err.code === 'signed-out' || !keepTabs) { fail(s, err); return; }
-          stateBlock(grid, { icon: 'info', title: 'This list didn\u2019t load', text: errorMessage(err),
+          stateBlock(grid, { icon: 'info', title: 'This list didn’t load', text: errorMessage(err),
             actions: [{ label: 'Retry', icon: 'reload', action: 'retry-list', primary: true }, { label: 'Open website', icon: 'globe', action: 'open-website' }] }, 'buttons');
           return;
         }
         data = data || {};
         if (!params.title && data.title) titleEl.textContent = data.title;
+        /* The page's own filter panel names the choices it offers today (years move on). */
+        if (fkind && data.filters && url === allUrl) { fgroups = Filters.groups(fkind, data.filters); renderBar(); }
         /* Switching chips keeps the chip row (and focus on the chip); only the first load builds it. */
-        if (!params.tabs && !keepTabs) renderTabs(data.chips, url);
+        if (!params.tabs && !keepTabs && !chipsSeen) { chipsSeen = data.chips || []; renderTabs(chipsSeen, url); }
         next = data.next || '';
-        if (!add(data.items)) {
-          stateBlock(grid, { icon: 'film', title: 'Nothing here yet', text: 'This list is empty right now. The website may show more.',
-            actions: [{ label: 'Open website', icon: 'globe', action: 'open-website', primary: true }] }, 'buttons');
+        var shown = add(data.items);
+        var filling = afterPage(data.items);
+        if (!shown && !filling) {
+          /* A person with no movies: show their TV shows instead. */
+          if (params.person && !switchedEmpty && !next) {
+            var other = U.find(U.qsa(tabs, '.mb-chip'), function (c) { return c.__href && c.__href !== url; });
+            if (other) { switchedEmpty = true; load(other.__href, true); return; }
+          }
+          emptyState();
         }
         setCount();
         markTab();
@@ -1693,7 +1940,7 @@ var Screens = (function () {
           var cur = Focus.current();
           if (cur && grid.contains(cur) && cur !== Focus.firstIn(grid)) return;
           var hadFocus = !!cur && grid.contains(cur);
-          U.empty(grid); keys = {}; count = 0;
+          U.empty(grid); keys = {}; count = 0; scanned = 0; fill = { pages: 0, shown: 0 };
           done(null, data);
           if (hadFocus && Focus.firstIn(grid)) App.focus(Focus.firstIn(grid));
         });
@@ -1704,9 +1951,11 @@ var Screens = (function () {
 
     function listSig(data) { return U.map((data && data.items) || [], function (it) { return it.key + '|' + (it.progress >= 0 ? Math.round(it.progress * 100) : ''); }).join(',') + '>' + ((data && data.next) || ''); }
 
-    function loadMore() {
+    /* auto: a page read to fill a client-side filter, not one the viewer reached. */
+    function loadMore(auto) {
       if (!next || loadingMore || capped) return;
-      if (count >= MAX_TITLES) { capNote(); return; }
+      if (count >= MAX_TITLES || scanned >= MAX_SCANNED) { capNote(); return; }
+      if (!auto) fill = { pages: 0, shown: 0 };
       loadingMore = true;
       var mine = seq;
       U.empty(foot);
@@ -1715,22 +1964,23 @@ var Screens = (function () {
         loadingMore = false;
         if (!s.alive || mine !== seq) return;
         U.empty(foot);
-        if (err) { App.toast('Couldn\u2019t load more titles'); return; }
+        if (err) { App.toast('Couldn’t load more titles'); return; }
         next = data && data.next || '';
         add(data && data.items);
+        if (!afterPage(data && data.items) && !count) emptyState();
         setCount();
       });
     }
 
-    s.initialFocus = function () { return Focus.firstIn(grid) || Focus.firstIn(tabs) || Focus.firstIn(s.el); };
+    s.initialFocus = function () { return Focus.firstIn(grid) || (bar && Focus.firstIn(bar)) || Focus.firstIn(tabs) || Focus.firstIn(s.el); };
 
     s.onFocus = function (node) {
       var z = Focus.zoneOf(node);
-      prefetchOnRest(z === grid ? node.__item : null);
+      prefetchOnRest(z === grid ? node.__item : null, z === grid ? node : null);
       if (z === grid && node.__item) {
         Kit.reveal(vs, vport, node, Kit.em() * 3, Kit.em() * 3);
         var gi = Focus.gridInfo(node);
-        if (gi && gi.index >= gi.count - 6) loadMore();
+        if (gi && gi.index >= gi.count - 6) loadMore(false);
       } else if (z && (foot.contains(z) || grid.contains(z))) Kit.reveal(vs, vport, node, Kit.em() * 3, Kit.em() * 3);
       else Kit.setY(vs, 0);
     };
@@ -1738,14 +1988,26 @@ var Screens = (function () {
     s.act = function (action, node) {
       if (action === 'retry-list') { load(url, true); return true; }
       if (action === 'open-website') { App.openWebsite(url); return true; }
+      if (fkind && action === 'filters') { openFilters(node && node.__fgroup || ''); return true; }
+      if (fkind && action === 'filters-reset') { applyFilters(null); return true; }
+      if (fkind && action === 'filters-sort-imdb') { var f = Filters.norm(filt); f.sort = 'rating'; applyFilters(f); return true; }
+      if (node && node.__fgroup) { openFilters(node.__fgroup); return true; }
       if (node && node.__href) { if (node.__href !== url) load(node.__href, true); return true; }
       if (node && node.__item) { App.push('detail', { kind: node.__item.kind, id: node.__item.id, item: compactItem(node.__item) }); return true; }
       return false;
     };
 
+    /* The session copy keeps the filters (and drops a stale URL for the filtered screens). */
+    s.snapshot = function () {
+      var p = {};
+      for (var k in params) if (params.hasOwnProperty(k)) p[k] = params[k];
+      if (fkind) { p.filters = filt; p.url = allUrl; }
+      return p;
+    };
     s.onHide = function () { prefetchOnRest(null); };
     s.destroy = s.onHide;
 
+    renderBar();
     if (params.tabs) renderTabs(params.tabs, url);
     else tabs.style.display = 'none';
     load(url, false);

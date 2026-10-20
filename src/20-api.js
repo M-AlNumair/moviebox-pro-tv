@@ -50,17 +50,20 @@ var Api = (function () {
 
   function retryable(err) { return !!err && (err.code === 'network' || /^http-5\d\d$/.test(err.code)); }
 
-  function request(url, headers, cb, attempt) {
+  /* body (optional): a form-encoded POST body (the website's own actor search); otherwise a GET. */
+  function request(url, headers, cb, attempt, body) {
     attempt = attempt || 0;
     stats.requests++;
     var started = U.now();
-    U.xhr({ url: url, timeout: cfg.timeout, headers: headers }, function (err, res) {
+    var opts = { url: url, timeout: cfg.timeout, headers: headers };
+    if (body != null) { opts.method = 'POST'; opts.body = body; }
+    U.xhr(opts, function (err, res) {
       /* U.xhr's abort() on timeout fires readystatechange first, which reports status 0 as 'network': reclassify. */
       if (err && err.code === 'network' && U.now() - started >= cfg.timeout - 20) err = { code: 'timeout', status: 0 };
       if (err && attempt < 1 && retryable(err)) {
         stats.retries++;
         Log.info('api-retry', err.code + ' ' + url);
-        U.later(function () { request(url, headers, cb, attempt + 1); }, cfg.retryDelay, 'api-retry');
+        U.later(function () { request(url, headers, cb, attempt + 1, body); }, cfg.retryDelay, 'api-retry');
         return;
       }
       if (err) { err.url = url; cb(err, null); return; }
@@ -110,11 +113,16 @@ var Api = (function () {
     });
   }
 
-  function fetchJSON(url, cb) {
+  var JSON_HEADERS = { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01' };
+  var FORM_HEADERS = { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01', 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' };
+
+  /* body (optional): POST it form-encoded (postJSON). */
+  function fetchJSON(url, cb, body) {
     var target = normalizeUrl(url);
     if (!target) { deliver(cb, fail('bad-url', String(url))); return; }
-    share('json ' + target, cb, function (finish) {
-      request(target, { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01' }, function (err, res) {
+    var post = body != null;
+    share((post ? 'post ' : 'json ') + target + (post ? ' ' + body : ''), cb, function (finish) {
+      request(target, post ? FORM_HEADERS : JSON_HEADERS, function (err, res) {
         if (err) { finish(err); return; }
         var data = U.parseJSON(res.text);
         if (data == null) {
@@ -122,9 +130,11 @@ var Api = (function () {
           return;
         }
         finish(null, data);
-      });
+      }, 0, post ? String(body) : null);
     });
   }
+
+  function postJSON(url, body, cb) { fetchJSON(url, cb, body == null ? '' : body); }
 
   function withDoc(url, parse, cb) {
     fetchDoc(url, function (err, res) {
@@ -194,6 +204,31 @@ var Api = (function () {
       res.page = page;
       if (!res.query) res.query = q;
       if (page === 1) addRecentSearch(q);
+      cb(null, res);
+    });
+  }
+
+  /* ---------- people search ---------- */
+
+  /* people(q, page, cb) -> {query, page, items: [person], next: bool}. The website's own actor search (a POST its
+     script makes); like the search page it records the query in the server-side history, so it runs only on an
+     explicit submit, and answers are kept in memory (10 min) so paging back and forth never asks twice. */
+  var PEOPLE_PAGE = 10, PEOPLE_MAX = 20, peopleCache = { keys: [], map: {} };
+
+  function people(q, page, cb) {
+    q = U.text(q);
+    page = Math.max(1, parseInt(page, 10) || 1);
+    if (!q) { deliver(cb, null, { query: '', page: page, items: [], next: false }); return; }
+    var ck = q.toLowerCase() + '|' + page, hit = has(peopleCache.map, ck) ? peopleCache.map[ck] : null;
+    if (hit && U.now() - hit.t < cfg.memTtl) { deliver(cb, null, copy(hit.v)); return; }
+    postJSON(Site.url.people(q), Site.url.peopleBody(q, page), function (err, data) {
+      if (err) { cb(err, null); return; }
+      if (data && typeof data === 'object' && data.code != null && +data.code !== 1) { cb(fail('site-error', Site.url.people(q), { message: String(data.msg || '') }), null); return; }
+      var items = Site.people(data, Site.url.origin() + '/');
+      var res = { query: q, page: page, items: items, next: items.length >= PEOPLE_PAGE };
+      if (!has(peopleCache.map, ck)) peopleCache.keys.push(ck);
+      peopleCache.map[ck] = { t: U.now(), v: copy(res) };
+      while (peopleCache.keys.length > PEOPLE_MAX) delete peopleCache.map[peopleCache.keys.shift()];
       cb(null, res);
     });
   }
@@ -544,6 +579,7 @@ var Api = (function () {
     mem = { keys: [], map: {} };
     lists = { keys: [], map: {} };
     suggestCache = { keys: [], map: {} };
+    peopleCache = { keys: [], map: {} };
     metaState = { v: 1, order: [], items: {} };
     metaDirty = true;
     flush();
@@ -572,7 +608,9 @@ var Api = (function () {
 
   return {
     fetchDoc: guardAsync('fetchDoc', fetchDoc),
-    fetchJSON: guardAsync('fetchJSON', fetchJSON),
+    fetchJSON: guardAsync('fetchJSON', function (url, cb) { fetchJSON(url, cb); }),
+    postJSON: guardAsync('postJSON', postJSON),
+    people: guardAsync('people', people),
     home: guardAsync('home', home),
     list: guardAsync('list', list),
     listCached: guardSync('listCached', listCached, null),

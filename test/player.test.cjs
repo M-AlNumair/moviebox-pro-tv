@@ -58,11 +58,14 @@ const pages = [];
 async function open(cookies = {}, opts = {}) {
   const page = await openPage(browser, { tv: false, ua: opts.ua });
   pages.push(page);
+  if (process.env.DEBUG_CONSOLE) page.on('console', m => console.log('    console: ' + m.text().slice(0, 300)));
   const list = Object.keys(cookies).map(name => ({ name, value: String(cookies[name]), url: origin }));
   if (list.length) await page.context_.addCookies(list);
   await page.goto(origin + '/__player/blank');
   await page.addScriptTag({ content: code });
   await page.evaluate(() => Promise.all([fetch('/__mock/progress-log?reset=1'), fetch('/__mock/player-log?reset=1')]));
+  // hls.js's CDN copy is the mock's (tests never reach the network); opts.config may override it.
+  await page.evaluate(o => window.__p.NativePlayer.configure({ hlsCdn: o + '/__cdn/hls.min.js' }), origin);
   if (opts.config) await page.evaluate(c => window.__p.NativePlayer.configure(c), opts.config);
   if (opts.saver) {
     await page.evaluate(() => {
@@ -79,6 +82,8 @@ async function done(page) {
   const entries = await page.evaluate(() => window.__p.Log.entries().concat(window.__p.Log.persisted()).map(e => e.label + ' ' + e.msg).join('\n'));
   assert.ok(!/__media|\.m3u8|\.wav|\.mp4|sign=|REDACTED|__subs|\.srt|\.vtt|get_srt_content/.test(entries), 'a stream or subtitle URL reached the log:\n' + entries);
   assert.deepStrictEqual(page.errors, [], 'page errors');
+  // The player's last progress post goes out now, not as the page closes (it would land in the next test's log).
+  await page.evaluate(() => { try { window.__p.NativePlayer.stop('test-end'); } catch (e) {} return new Promise(r => setTimeout(r, 150)); }).catch(() => {});
   await page.context_.close();
 }
 
@@ -99,6 +104,7 @@ const focusedAction = page => page.evaluate(() => { const n = document.querySele
 const key = (page, name) => page.evaluate(n => window.__p.NativePlayer.key(n, {}), name);
 
 async function waitPlaying(page, extra, timeout = 20000) {
+  try {
   await page.waitForFunction(x => {
     const i = window.__p.NativePlayer.info();
     const v = document.querySelector('#mbptv-player video');
@@ -106,6 +112,10 @@ async function waitPlaying(page, extra, timeout = 20000) {
     for (const k in (x || {})) if (i[k] !== x[k]) return false;
     return true;
   }, extra || null, { timeout });
+  } catch (e) {
+    const log = await page.evaluate(() => window.__p.Log.entries().map(x => x.msg).join('\n')).catch(() => '');
+    throw new Error(e.message + '\nwanted ' + JSON.stringify(extra) + ', info ' + JSON.stringify(await info(page).catch(() => null)) + '\n' + log.split('\n').slice(-25).join('\n'));
+  }
 }
 
 async function waitTime(page, min, timeout = 20000) {
@@ -601,7 +611,15 @@ t.test('every stream failing shows "This video won’t play here" (streams-faile
   await play(page, MOVIE);
   await page.waitForFunction(() => document.getElementById('mbptv-player').getAttribute('data-state') === 'error', null, { timeout: 15000 });
   const tried = (await playerLog(page)).filter(e => e.kind === 'media').map(e => e.path);
-  assert.strictEqual(tried.length, 5, 'all five candidates tried: ' + tried.join(', '));
+  // Five candidates; the platform player refuses each HLS one (media error 4), so hls.js tries it as well (4 + 1 + 4).
+  assert.strictEqual(new Set(tried).size, 5, 'all five candidates tried: ' + tried.join(', '));
+  assert.strictEqual(tried.length, 9, 'HLS candidates also through hls.js: ' + tried.join(', '));
+  // The movie has two files: "Try another file" leads; the website's player stays the last resort before Back.
+  assert.deepStrictEqual(await errButtons(page), ['other-file*', 'retry', 'website', 'back']);
+  assert.ok(/Try another file of this title/.test(await text(page, '#mbptv-player .mbp-err-body')), await text(page, '#mbptv-player .mbp-err-body'));
+  assert.ok(/^Tried Auto: .+ · Original: .+ · 1080p: /.test(await text(page, '#mbptv-player .mbp-err-code')), await text(page, '#mbptv-player .mbp-err-code'));
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowRight');
   assert.strictEqual(await page.evaluate(() => document.querySelector('#mbptv-player .mbp-err-btns .is-focused').getAttribute('data-action')), 'back');
   await page.keyboard.press('ArrowLeft');
@@ -1137,6 +1155,431 @@ t.test('subtitles: Settings > Subtitle size changes the cue size', async () => {
   await waitSubs(page, 'Hello there');
   near(await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#mbptv-player .mbp-subs-box')).fontSize)), 60.75, 1, 'large (3.375em at 1em = 18px)');
   assert.strictEqual(await page.evaluate(() => document.getElementById('mbptv-player').getAttribute('data-subsize')), 'large');
+  await done(page);
+});
+
+/* ---------- Tizen stream rules, verified switching, audio languages (docs/PLAYER.md) ---------- */
+
+t.test('stream order (TV): AUTO, MP4 original, 1080p, Matroska original, lower HLS, 4K HLS, then risky originals; VIP placeholder dropped', async () => {
+  const page = await open();
+  const out = await page.evaluate(() => {
+    const P = window.__p.NativePlayer, labels = list => list.map(c => c.label + (c.hls ? '' : ':' + c.kind));
+    const hls = (label, w, h, extra) => Object.assign({ type: 'application/x-mpegURL', file: 'https://hls.example/1.m3u8?quality=' + label, label, h265: 0, width: w, height: h }, extra || {});
+    const org = ext => ({ type: 'video/mp4', file: 'https://cdn.example/vip/p1/movie.1.original.' + ext + '?KEY1=x', label: 'ORG', h265: 1, width: 3840, height: 2160, hdr: 1 });
+    const list = ext => P._parse('var sources = ' + JSON.stringify([org(ext), hls('AUTO', 0, 0), hls('4K', 3840, 2160, { h265: 1, hdr: 1 }), hls('1080p', 1920, 1080), hls('720p', 0, 0), hls('360p', 0, 0)]) + ';').sources;
+    const tv = { tv: true, aac: true, canPlay: () => 'probably' };
+    const vip = P._parse('var sources = ' + JSON.stringify([{ type: 'video/mp4', file: 'https://www.example/video/vip_only.mp4', label: 'ORG' }, hls('AUTO', 0, 0)]) + ';').sources;
+    return {
+      mp4: labels(P._order(list('mp4'), Object.assign({ fileName: 'Movie.2160p.WEB-DL.mkv', fileSize: '14.7 GB' }, tv))),
+      mkv: labels(P._order(list('mkv'), Object.assign({ fileName: 'Movie.2160p.WEB-DL.DDP5.1.Atmos.mkv', fileSize: '14.7 GB' }, tv))),
+      dts: labels(P._order(list('mkv'), Object.assign({ fileName: 'Oppenheimer.2023.2160p.UHD.Bluray.REMUX.HDR10.HEVC.DTS-HD.MA.5.1-GHD.mkv', fileSize: '9 GB' }, tv))),
+      truehd: labels(P._order(list('mkv'), Object.assign({ fileName: 'The.Godfather.1972.2160p.x265.10bit.HDR.TrueHD.5.1-RARBG.mkv' }, tv))),
+      heavy: labels(P._order(list('mp4'), Object.assign({ fileName: 'Parasite.4K.BDRemux.mp4', fileSize: '77.51 GB' }, tv))),
+      desk: labels(P._order(list('mp4'), { tv: false, aac: false, canPlay: () => 'probably', fileSize: '82.21 GB' })),
+      vip: labels(P._order(vip, tv))
+    };
+  });
+  assert.deepStrictEqual(out.mp4, ['AUTO', 'ORG:mp4', '1080p', '720p', '360p', '4K']);
+  assert.deepStrictEqual(out.mkv, ['AUTO', '1080p', 'ORG:mkv', '720p', '360p', '4K']);
+  assert.deepStrictEqual(out.dts, ['AUTO', '1080p', '720p', '360p', '4K', 'ORG:risky'], 'DTS cannot be decoded by the TV');
+  assert.deepStrictEqual(out.truehd, ['AUTO', '1080p', '720p', '360p', '4K', 'ORG:risky']);
+  assert.deepStrictEqual(out.heavy, ['AUTO', '1080p', '720p', '360p', '4K', 'ORG:risky'], 'an 80 GB remux stalls on Wi-Fi');
+  assert.deepStrictEqual(out.desk, ['AUTO', '4K', '1080p', '720p', '360p', 'ORG:risky']);
+  assert.deepStrictEqual(out.vip, ['AUTO'], 'the VIP placeholder is never played');
+  await done(page);
+});
+
+t.test('quality: a rendition that does not play hands back to the stream that was playing, at the same position', async () => {
+  const page = await open({ mbp_len: 300, mbp_seconds: 60, mbp_bad: '720p' }, { config: { candidateTimeout: 3000 } });
+  await play(page, MOVIE);
+  await waitPlaying(page, { label: 'ORG' });
+  await waitTime(page, 61);
+  await key(page, 'down');
+  await key(page, 'left');
+  assert.strictEqual(await focusedAction(page), 'quality');
+  await key(page, 'enter');
+  await waitClass(page, 'is-sheet');
+  await key(page, 'up');
+  await key(page, 'up');
+  assert.strictEqual(await page.evaluate(() => document.querySelector('#mbptv-player [data-quality].is-focused').getAttribute('data-quality')), '720p');
+  const before = (await video(page)).t;
+  await key(page, 'enter');
+  await page.waitForFunction(() => /720p didn’t play on this TV — playing Original instead/.test(document.querySelector('#mbptv-player .mbp-chip').textContent), null, { timeout: 15000 });
+  await waitPlaying(page, { label: 'ORG' });
+  near((await video(page)).t, before, 3, 'position kept');
+  const log = (await playerLog(page)).filter(e => e.kind === 'media').map(e => e.path + (e.query.q ? '?' + e.query.q : ''));
+  assert.deepStrictEqual(log.slice(-2), ['/__media/bad-720p.m3u8', '/__media/ep.wav?org'], 'straight back to the stream that played: ' + log.join(', '));
+  await key(page, 'down');
+  await key(page, 'enter');
+  await waitClass(page, 'is-sheet');
+  const meta = await text(page, '#mbptv-player [data-quality="720p"] .mbp-opt-meta');
+  assert.ok(/^Didn’t play here/.test(meta), meta);
+  // The site copies 1080p sizes onto lower renditions: no "1920 × 1080" on 720p.
+  assert.ok(!/1920/.test(meta), meta);
+  await done(page);
+});
+
+t.test('a resume position the player ignored is applied again once it plays', async () => {
+  const page = await open({ mbp_len: 300, mbp_seconds: 95 });
+  await page.evaluate(() => {
+    const d = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'currentTime');
+    let ignored = 0;
+    Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', { configurable: true, get() { return d.get.call(this); },
+      set(v) { if (v > 0 && !ignored) { ignored++; return; } d.set.call(this, v); } });
+  });
+  await play(page, MOVIE);
+  await waitPlaying(page);
+  await waitTime(page, 94);
+  near((await video(page)).t, 95, 3, 'resumed after all');
+  assert.ok(/at \d+ instead of 95: seeking again/.test(await logText(page)), await logText(page));
+  await done(page);
+});
+
+t.test('every stream failing: "Try another file" plays the title\'s other file; when all files failed the website is next', async () => {
+  const page = await open({ mbp_all: 'bad' });
+  await play(page, MOVIE);
+  await errorState(page);
+  assert.deepStrictEqual(await errButtons(page), ['other-file*', 'retry', 'website', 'back']);
+  await page.evaluate(() => fetch('/__mock/player-log?reset=1'));
+  await key(page, 'enter');
+  await errorState(page);
+  const player = (await playerLog(page)).filter(e => e.kind === 'player');
+  assert.strictEqual(player.length, 1);
+  assert.strictEqual(player[0].query.mfid, '2215085', 'the second file');
+  assert.deepStrictEqual(await errButtons(page), ['retry', 'website*', 'back'], 'both files tried');
+  assert.ok(/This TV can’t play the video or audio format of this file\.|None of the available streams/.test(await text(page, '#mbptv-player .mbp-err-body')));
+  assert.strictEqual((await events(page, 'open')).length, 1, 'same overlay');
+  await done(page);
+});
+
+/* A stand-in for the platform's AudioTrackList (Tizen documents HTMLMediaElement.audioTracks; desktop Chrome hides it). */
+const fakeTracks = (page, langs) => page.evaluate(list => {
+  window.__audioSets = [];
+  const make = () => {
+    const tracks = list.map((l, i) => ({ id: String(i), kind: 'main', label: l.label || '', language: l.language || '', _on: i === 0 }));
+    tracks.forEach(t => Object.defineProperty(t, 'enabled', { get() { return this._on; }, set(v) { this._on = !!v; window.__audioSets.push([this.language, !!v]); } }));
+    const L = { length: tracks.length, addEventListener() {}, removeEventListener() {} };
+    tracks.forEach((t, i) => { L[i] = t; });
+    return L;
+  };
+  Object.defineProperty(HTMLMediaElement.prototype, 'audioTracks', { configurable: true, get() { return this.__at || (this.__at = make()); } });
+}, langs);
+const audioRows = page => page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('#mbptv-player [data-sheet="player-audio"] [data-audio]'), r => ({
+  i: r.getAttribute('data-audio'), lang: r.getAttribute('data-audio-lang'), title: r.querySelector('.mbp-opt-label').textContent,
+  meta: (r.querySelector('.mbp-opt-meta') || {}).textContent || '', cur: r.classList.contains('is-current'), focus: r.classList.contains('is-focused') })));
+async function focusButton(page, action) {
+  await key(page, 'down');
+  for (let i = 0; i < 8 && await focusedAction(page) !== action; i++) await key(page, 'right');
+  assert.strictEqual(await focusedAction(page), action);
+}
+
+t.test('audio: video.audioTracks with two languages gives an Audio button; the choice switches tracks, is remembered and applied to the next title', async () => {
+  const page = await open({ mbp_len: 120 }, { config: { audioVerify: 300 } });
+  await fakeTracks(page, [{ language: 'en', label: 'English' }, { language: 'jpn', label: '' }]);
+  await play(page, MOVIE);
+  await waitPlaying(page);
+  await focusButton(page, 'audio');
+  assert.strictEqual(await text(page, '#mbptv-player [data-action="audio"] .mbp-btn-value'), 'English');
+  const order = await page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('#mbptv-player .mbp-btns [data-action]'), b => b.getAttribute('data-action')));
+  assert.ok(order.indexOf('audio') === order.indexOf('quality') + 1, 'after Quality: ' + order.join(','));
+  await key(page, 'enter');
+  await waitClass(page, 'is-sheet');
+  assert.strictEqual(await page.evaluate(() => document.querySelector('#mbptv-player .mbp-sheet').getAttribute('data-sheet')), 'player-audio');
+  const rows = await audioRows(page);
+  assert.deepStrictEqual(rows.map(r => [r.i, r.lang, r.title, r.cur, r.focus]), [['0', 'en', 'English', true, true], ['1', 'ja', 'Japanese', false, false]]);
+  await key(page, 'down');
+  await key(page, 'enter');
+  await page.waitForFunction(() => document.querySelector('#mbptv-player .mbp-chip').textContent === 'Audio: Japanese', null, { timeout: 5000 });
+  assert.deepStrictEqual(await page.evaluate(() => window.__audioSets), [['jpn', true], ['en', false]]);
+  assert.strictEqual(await page.evaluate(() => window.__p.Prefs.get('audioLang')), 'ja');
+  assert.strictEqual((await info(page)).audio, 'Japanese');
+  // The next title starts in the remembered language by itself.
+  await page.evaluate(() => window.__p.NativePlayer.stop('test'));
+  await page.evaluate(() => { window.__audioSets = []; });
+  await play(page, MOVIE);
+  await waitPlaying(page);
+  await page.waitForFunction(() => window.__audioSets.length >= 2, null, { timeout: 5000 });
+  assert.deepStrictEqual(await page.evaluate(() => window.__audioSets), [['jpn', true], ['en', false]]);
+  assert.ok(/audio: the remembered language \(ja\)/.test(await logText(page)));
+  await done(page);
+});
+
+t.test('audio: no Audio button with a single track, and none without audioTracks or a master', async () => {
+  const page = await open({ mbp_len: 120 });
+  await fakeTracks(page, [{ language: 'en', label: 'English' }]);
+  await play(page, MOVIE);
+  await waitPlaying(page);
+  await key(page, 'down');
+  const actions = await page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('#mbptv-player .mbp-btns [data-action]'), b => b.getAttribute('data-action')));
+  assert.ok(actions.indexOf('audio') < 0, actions.join(','));
+  assert.strictEqual((await info(page)).audio, '');
+  await done(page);
+  const page2 = await open({ mbp_len: 120, mbp_auto: 'ok' });
+  await play(page2, MOVIE);
+  await waitPlaying(page2, { label: 'AUTO' });
+  await page2.waitForFunction(() => /audio: master not read/.test(window.__p.Log.entries().map(e => e.msg).join('\n')), null, { timeout: 8000 });
+  await key(page2, 'down');
+  assert.ok(!(await page2.evaluate(() => !!document.querySelector('#mbptv-player [data-action="audio"]'))));
+  await done(page2);
+});
+
+t.test('audio: without audioTracks, the HLS master names the languages; a rewritten master the TV cannot play hands back at the same position', async () => {
+  const page = await open({ mbp_len: 300, mbp_auto: 'ok', mbp_master: '1' }, { config: { candidateTimeout: 3000 } });
+  await page.evaluate(() => {
+    window.__xhrCreds = [];
+    const open = XMLHttpRequest.prototype.open, send = XMLHttpRequest.prototype.send;
+    XMLHttpRequest.prototype.open = function (m, u) { this.__u = u; return open.apply(this, arguments); };
+    XMLHttpRequest.prototype.send = function () { if (/__media\/ep\.wav/.test(this.__u)) window.__xhrCreds.push(this.withCredentials); return send.apply(this, arguments); };
+  });
+  await play(page, MOVIE);
+  await waitPlaying(page, { label: 'AUTO' });
+  await page.waitForFunction(() => /audio: AUTO lists 2 \[en\*, ko\]; video\.audioTracks missing/.test(window.__p.Log.entries().map(e => e.msg).join('\n')), null, { timeout: 8000 });
+  const master = (await playerLog(page)).filter(e => e.kind === 'master');
+  assert.strictEqual(master.length, 1, 'the master is read once');
+  assert.strictEqual(master[0].query.audio, 'aac');
+  assert.deepStrictEqual(await page.evaluate(() => window.__xhrCreds), [false], 'read without credentials (the HLS hosts answer ACAO: *)');
+  await waitTime(page, 3);
+  await focusButton(page, 'audio');
+  assert.strictEqual(await text(page, '#mbptv-player [data-action="audio"] .mbp-btn-value'), 'English');
+  await key(page, 'enter');
+  await waitClass(page, 'is-sheet');
+  const rows = await audioRows(page);
+  assert.deepStrictEqual(rows.map(r => [r.lang, r.title, r.meta, r.cur]), [['en', 'English', 'ENG', true], ['ko', 'Korean', 'KOR', false]]);
+  const before = (await video(page)).t;
+  await key(page, 'down');
+  await key(page, 'enter');
+  await page.waitForFunction(() => /This TV can’t switch the audio language/.test(document.querySelector('#mbptv-player .mbp-chip').textContent), null, { timeout: 20000 });
+  await waitPlaying(page, { label: 'AUTO' });
+  near((await video(page)).t, before, 3, 'position kept');
+  const entries = await logText(page);
+  assert.ok(/stream AUTO \(audio\) failed/.test(entries) && /a rewritten master does not play on this TV/.test(entries), entries);
+  assert.ok(!/data:application|base64|m3u8_proxy/.test(entries), 'the data: master is never logged');
+  assert.strictEqual(await page.evaluate(() => window.__p.Prefs.get('audioLang')), 'ko', 'the wish is remembered');
+  await key(page, 'down');
+  assert.ok(!(await page.evaluate(() => !!document.querySelector('#mbptv-player [data-action="audio"]'))), 'no Audio button once the TV showed it cannot switch');
+  await done(page);
+});
+
+t.test('audio: the master parser and rewrite (pure)', async () => {
+  const page = await open();
+  const master = ['#EXTM3U', '#EXT-X-VERSION:7',
+    '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio_aac",LANGUAGE="ko",NAME="KOR (5.1)",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="2",URI="/m3u8_proxy/audio/a_1.m3u8?sign=S1"',
+    '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio_aac",LANGUAGE="it",NAME="ITA (5.1)",DEFAULT=NO,AUTOSELECT=YES,CHANNELS="2",URI="/m3u8_proxy/audio/a_2.m3u8?sign=S2"',
+    '#EXT-X-STREAM-INF:BANDWIDTH=8958000,RESOLUTION=3840x2160,CODECS="hvc1.2.4.L180.90,mp4a.40.2",AUDIO="audio_aac",VIDEO-RANGE=PQ',
+    'video_2160p.m3u8?sign=V1', ''].join('\n');
+  const out = await page.evaluate(m => {
+    const P = window.__p.NativePlayer;
+    return { list: P._audioList(m), re: P._audioMaster(m, 'https://hls.example/40033921.m3u8?sign=M', 'audio_aac', 1), none: P._audioList('#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8') };
+  }, master);
+  assert.strictEqual(out.list.group, 'audio_aac');
+  assert.deepStrictEqual(out.list.list.map(x => [x.code, x.name, x.def]), [['ko', 'KOR (5.1)', true], ['it', 'ITA (5.1)', false]]);
+  assert.strictEqual(out.list.def, 0);
+  const lines = out.re.split('\n');
+  assert.strictEqual(lines.filter(l => /^#EXT-X-MEDIA/.test(l)).length, 1, 'only the chosen rendition');
+  assert.ok(/LANGUAGE="it".*DEFAULT=YES,AUTOSELECT=YES.*URI="https:\/\/hls\.example\/m3u8_proxy\/audio\/a_2\.m3u8\?sign=S2"/.test(out.re), out.re);
+  assert.ok(lines.indexOf('https://hls.example/video_2160p.m3u8?sign=V1') > 0, 'variant made absolute');
+  assert.deepStrictEqual(out.none.list, []);
+  await done(page);
+});
+
+/* ---------- hls.js (Media Source Extensions) ---------- */
+
+const hlsMock = page => page.evaluate(() => window.__hlsMock ? { loads: window.__hlsMock.loads, list: window.__hlsMock.summary() } : null);
+
+t.test('hls.js: the platform player refuses HLS (media error 4), so the same stream plays through hls.js (site copy); remembered for the next start', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120 });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  const i = await info(page);
+  assert.strictEqual(i.label, 'AUTO');
+  assert.strictEqual(i.level, '1080p');
+  assert.strictEqual(i.audio, 'English');
+  const log = await logText(page);
+  assert.ok(/stream AUTO failed: media-4 .*\n.*the platform player refused AUTO \(media-4\): trying it through hls\.js\ntry AUTO \(hls\.js\) after media-4/.test(log), log);
+  assert.ok(/hls\.js 1\.4\.0-mock ready \(site copy, \d+\.\d s; MSE ec-3 (?:yes|no), hevc (?:yes|no)\)/.test(log), log);
+  // AUTO lists 4K HEVC first: adaptive playback starts on the best H.264 rendition and never goes to HEVC by itself.
+  assert.ok(/hls\.js: 4 levels \[360p, 720p, 1080p, 4K HEVC\], start 1080p, HEVC kept for the Quality menu/.test(log), log);
+  assert.ok(/engine hls\.js 1\.4\.0-mock \(site copy\) · AUTO · 1080p level · audio en/.test(log), log);
+  assert.ok(/the platform player refuses HLS here: hls\.js from now on \(remembered\)/.test(log), log);
+  assert.ok(/playing AUTO after \d+\.\d s \(.*hls\.js\)/.test(log), log);
+  let m = await hlsMock(page);
+  assert.deepStrictEqual(m.loads, ['site']);
+  assert.strictEqual(m.list.length, 1);
+  assert.strictEqual(m.list[0].cap, 2, 'autoLevelCapping: the best H.264 level');
+  assert.strictEqual(m.list[0].startLevel, 2);
+  assert.strictEqual((await page.evaluate(() => window.__p.NativePlayer.configure().hls)).verdict, 'refuses');
+  // The next start goes straight to hls.js (no refused attempt first), with a fresh instance; the old one is destroyed.
+  await page.evaluate(() => window.__p.NativePlayer.stop('test'));
+  await page.evaluate(() => window.__p.Log.clear ? window.__p.Log.clear() : null);
+  await play(page, EPISODE);
+  await waitPlaying(page, { engine: 'hls.js', season: 1 });
+  const log2 = (await logText(page)).split('open tv:17417').pop();
+  assert.ok(/try AUTO \(hls\.js\)/.test(log2) && !/try AUTO \(hls\)/.test(log2) && !/refused/.test(log2), log2);
+  m = await hlsMock(page);
+  assert.deepStrictEqual(m.loads, ['site'], 'hls.js loads once');
+  assert.deepStrictEqual(m.list.map(x => x.destroyed), [true, false]);
+  await done(page);
+});
+
+t.test('hls.js: resume starts loading at the saved position; a quality switch is a new instance at the same position (verified)', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 300, mbp_seconds: 95 });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  near((await video(page)).t, 95, 2.5, 'resumed position');
+  let m = await hlsMock(page);
+  assert.strictEqual(m.list[0].startPosition, 95, 'hls.js startPosition');
+  // The resume chip is up: Down lands on Start over; Quality is to its left.
+  await key(page, 'down');
+  for (let k = 0; k < 8 && await focusedAction(page) !== 'quality'; k++) await key(page, 'left');
+  assert.strictEqual(await focusedAction(page), 'quality');
+  await key(page, 'enter');
+  await waitClass(page, 'is-sheet');
+  const rows = await page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('#mbptv-player [data-quality]'), r => r.getAttribute('data-quality')));
+  assert.deepStrictEqual(rows, ['AUTO', '1080p', '720p', '360p', 'ORG']);
+  const before = (await video(page)).t;
+  await key(page, 'down'); await key(page, 'down');
+  await key(page, 'enter');
+  await waitPlaying(page, { label: '720p', engine: 'hls.js' });
+  await page.waitForFunction(() => document.querySelector('#mbptv-player .mbp-chip').textContent === 'Quality: 720p', null, { timeout: 5000 });
+  near((await video(page)).t, before, 3, 'position after the switch');
+  m = await hlsMock(page);
+  assert.deepStrictEqual(m.list.map(x => x.destroyed), [true, false]);
+  near(m.list[1].startPosition, before, 3, 'the new instance starts at the position');
+  assert.strictEqual(m.list[1].levels, 1, 'a fixed quality is its own master (one rendition)');
+  assert.strictEqual((await info(page)).level, '720p');
+  assert.ok(/engine hls\.js 1\.4\.0-mock \(site copy\) · 720p · 720p level/.test(await logText(page)));
+  // Stop tears the instance down.
+  await page.evaluate(() => window.__p.NativePlayer.stop('test'));
+  m = await hlsMock(page);
+  assert.ok(m.list.every(x => x.destroyed), 'every instance destroyed after stop');
+  await done(page);
+});
+
+t.test('hls.js: Audio lists hls.js audio tracks; choosing one switches, is remembered and the next episode starts in it', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120 });
+  await play(page, EPISODE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  await page.waitForFunction(() => document.querySelector('#mbptv-player [data-action="audio"]'), null, { timeout: 5000 });
+  await focusButton(page, 'audio');
+  assert.strictEqual(await text(page, '#mbptv-player [data-action="audio"] .mbp-btn-value'), 'English');
+  await key(page, 'enter');
+  await waitClass(page, 'is-sheet');
+  const rows = await audioRows(page);
+  assert.deepStrictEqual(rows.map(r => [r.i, r.lang, r.title, r.meta, r.cur]), [['0', 'en', 'English', 'ENG', true], ['1', 'ko', 'Korean', 'KOR (5.1)', false]]);
+  await key(page, 'down');
+  await key(page, 'enter');
+  await page.waitForFunction(() => document.querySelector('#mbptv-player .mbp-chip').textContent === 'Audio: Korean', null, { timeout: 5000 });
+  assert.strictEqual(await page.evaluate(() => window.__p.Prefs.get('audioLang')), 'ko');
+  assert.strictEqual((await info(page)).audio, 'Korean');
+  const log = await logText(page);
+  assert.ok(/audio: track 2 of 2 \(ko\) via hls\.js\naudio: switched/.test(log), log);
+  assert.ok(!/audio: master/.test(log), 'no master read of its own under hls.js');
+  // Next episode: a new instance picks Korean as soon as hls.js knows the tracks (before playback).
+  await key(page, 'chup');
+  await waitPlaying(page, { engine: 'hls.js', episode: 2 });
+  await page.waitForFunction(() => window.__p.NativePlayer.info().audio === 'Korean', null, { timeout: 5000 });
+  assert.ok(/audio: the remembered language \(ko\) from the start, via hls\.js/.test(await logText(page)));
+  const m = await hlsMock(page);
+  assert.ok(m.list[1].log.indexOf('audioTrack=1 (before playback)') >= 0, JSON.stringify(m.list[1].log));
+  await done(page);
+});
+
+t.test('hls.js: one audio language means no Audio button; a switch hls.js never confirms says so', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120, mbp_langs: 1 });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  await key(page, 'down');
+  let acts = await page.evaluate(() => Array.prototype.map.call(document.querySelectorAll('#mbptv-player .mbp-btns [data-action]'), b => b.getAttribute('data-action')));
+  assert.ok(acts.indexOf('audio') < 0, acts.join(','));
+  await page.context_.addCookies([{ name: 'mbp_langs', value: '2', url: origin }]);
+  await page.evaluate(() => { window.__hlsMock.stuckAudio = true; window.__p.NativePlayer.configure({ audioSwitchTimeout: 800 }); });
+  await page.evaluate(() => window.__p.NativePlayer.stop('test'));
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  await page.waitForFunction(() => document.querySelector('#mbptv-player [data-action="audio"]'), null, { timeout: 5000 });
+  await focusButton(page, 'audio');
+  await key(page, 'enter');
+  await key(page, 'down');
+  await key(page, 'enter');
+  await page.waitForFunction(() => document.querySelector('#mbptv-player .mbp-chip').textContent === 'The audio didn’t switch', null, { timeout: 5000 });
+  assert.ok(/audio: hls\.js did not switch the track/.test(await logText(page)));
+  await done(page);
+});
+
+t.test('hls.js: a fatal media error is recovered once; a second one hands over to the next stream at the same place', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 1200 });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  await waitTime(page, 2);
+  await page.evaluate(() => window.__hlsMock.fatal('mediaError', 'bufferAppendError'));
+  await page.waitForFunction(() => window.__hlsMock.summary()[0].log.indexOf('recoverMediaError') >= 0, null, { timeout: 5000 });
+  await waitPlaying(page, { engine: 'hls.js', label: 'AUTO' });
+  const at = (await video(page)).t;
+  await page.evaluate(() => window.__hlsMock.fatal('mediaError', 'bufferAppendError'));
+  await waitPlaying(page, { label: 'ORG' });
+  await page.waitForFunction(() => window.__p.Log.entries().some(e => /^engine native/.test(e.msg)), null, { timeout: 5000 });
+  near((await video(page)).t, at, 3, 'the backup stream continues at the same place');
+  assert.strictEqual((await info(page)).engine, 'native');
+  const log = await logText(page);
+  assert.ok(/hls\.js mediaError\/bufferAppendError: recovering once/.test(log), log);
+  assert.ok(/stream AUTO \[hls\.js\] failed: hls-media after \d+\.\d s \(hls\.js mediaError\/bufferAppendError\)/.test(log), log);
+  assert.ok(/engine native · ORG \(mp4\)/.test(log), log);
+  assert.ok((await hlsMock(page)).list.every(x => x.destroyed), 'the hls.js instance is gone');
+  await done(page);
+});
+
+t.test('hls.js: without the site copy the CDN copy loads; without any copy HLS stays with the platform player and the original plays', async () => {
+  let page = await open({ mbp_hls: 'mse', mbp_len: 120, mbp_hlslib: 'nosite' });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  let log = await logText(page);
+  assert.ok(/hls\.js site copy: did not load\nhls\.js 1\.4\.0-mock ready \(CDN copy/.test(log), log);
+  assert.ok(/engine hls\.js 1\.4\.0-mock \(CDN copy\) · AUTO/.test(log), log);
+  assert.deepStrictEqual((await hlsMock(page)).loads, ['cdn']);
+  await done(page);
+
+  page = await open({ mbp_hls: 'mse', mbp_len: 120, mbp_hlslib: 'hang,nocdn' }, { config: { hlsLoadTimeout: 700 } });
+  await play(page, MOVIE);
+  await waitPlaying(page, { label: 'ORG' });
+  log = await logText(page);
+  assert.ok(/hls\.js site copy: timed out\nhls\.js CDN copy: did not load\nhls\.js unavailable \(no copy loaded\): HLS through the platform player only/.test(log), log);
+  assert.ok(/stream AUTO failed: media-4 after \d+\.\d s \(hls\.js unavailable\)/.test(log), 'the refused stream fails as it did: ' + log);
+  assert.strictEqual((await info(page)).engine, 'native');
+  await done(page);
+});
+
+t.test('hls.js: the app going to the background stops hls.js loading; coming back starts it again at the position', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120 });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  await setHidden(page, true);
+  assert.strictEqual((await video(page)).paused, true);
+  await setHidden(page, false);
+  const log = (await hlsMock(page)).list[0].log;
+  assert.ok(log.indexOf('stopLoad') >= 0 && /^startLoad \d+$/.test(log[log.length - 1]), JSON.stringify(log));
+  await done(page);
+});
+
+t.test('a large original slow to give up its header counts as alive while data arrives (no timeout)', async () => {
+  const page = await open({ mbp_org: 'slow', mbp_len: 60 }, { config: { candidateTimeout: 2000, hlsEngine: 'native' } });
+  await play(page, MOVIE);
+  await waitPlaying(page, {}, 30000);
+  assert.strictEqual((await info(page)).label, 'ORG', await logText(page));
+  await done(page);
+});
+
+t.test('stream order (TV with Media Source Extensions): Matroska originals after every HLS rendition', async () => {
+  const page = await open();
+  const out = await page.evaluate(() => {
+    const P = window.__p.NativePlayer, can = () => 'maybe';
+    const src = [{ label: 'ORG', src: 'https://x.example/a.mkv', hls: false }, { label: 'AUTO', src: 'https://x.example/a.m3u8', hls: true },
+      { label: '1080p', src: 'https://x.example/a.m3u8?quality=1080p', hls: true }, { label: '720p', src: 'https://x.example/a.m3u8?quality=720p', hls: true },
+      { label: '4K', src: 'https://x.example/a.m3u8?quality=4K', hls: true, h265: true }];
+    return { mse: P._order(src, { tv: true, aac: true, mse: true, canPlay: can, fileName: 'a.mkv' }).map(c => c.label),
+      plain: P._order(src, { tv: true, aac: true, canPlay: can, fileName: 'a.mkv' }).map(c => c.label) };
+  });
+  assert.deepStrictEqual(out.mse, ['AUTO', '1080p', '720p', '4K', 'ORG']);
+  assert.deepStrictEqual(out.plain, ['AUTO', '1080p', 'ORG', '720p', '4K']);
   await done(page);
 });
 

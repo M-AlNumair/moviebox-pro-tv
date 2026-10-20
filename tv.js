@@ -1,9 +1,9 @@
-/* MovieBox Pro TV 0.4.1 — independent TizenBrew module. MIT license. Built from src/; do not edit by hand. */
+/* MovieBox Pro TV 0.5.0 — independent TizenBrew module. MIT license. Built from src/; do not edit by hand. */
 (function () {
   'use strict';
-  var VERSION = "0.4.1";
+  var VERSION = "0.5.0";
   var START_URL = "https://www.movieboxpro.app/";
-  var CSS_TEXT = "/* MovieBox Pro TV shell. Scoped under #mbptv (plus the top-level #mbptv-pill, #mbptv-ring and #mbptv-osd).\n   Reference frame 1920x1080: 1em = 18px. Tokens: bg #07070a, elevated #131318, elevated-2 #1c1c23,\n   hairline rgba(255,255,255,.08), text #f5f5f7, text-2 rgba(245,245,247,.72), text-3 rgba(245,245,247,.6),\n   gold #e7bd68, IMDb #f5c518, fresh #fa320a, success #35c46a. Chromium 47 safe: flexbox, margins, prefixed transforms. */\n\n#mbptv, #mbptv-osd, #mbptv-pill, #mbptv-ring {\n  font-family: \"SamsungOne\", \"Samsung Sans\", \"TizenSans\", \"LG Smart UI\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  font-size: 0.9375vw;\n  -webkit-font-smoothing: antialiased;\n  -webkit-box-sizing: border-box;\n  box-sizing: border-box;\n  text-align: left;\n  direction: ltr;\n  letter-spacing: 0;\n  text-transform: none;\n  font-style: normal;\n}\n#mbptv {\n  position: fixed;\n  left: 0;\n  top: 0;\n  width: 100%;\n  height: 100%;\n  z-index: 2147483000;\n  background: #07070a;\n  color: #f5f5f7;\n  line-height: 1.3;\n  font-weight: 400;\n  overflow: hidden;\n  outline: none;\n  -webkit-user-select: none;\n  user-select: none;\n  cursor: default;\n}\n#mbptv div, #mbptv span, #mbptv img, #mbptv svg {\n  -webkit-box-sizing: border-box;\n  box-sizing: border-box;\n  margin: 0;\n  padding: 0;\n  border: 0;\n  outline: none;\n  float: none;\n  max-width: none;\n  background-image: none;\n  font-family: inherit;\n  line-height: inherit;\n  letter-spacing: inherit;\n  text-decoration: none;\n  color: inherit;\n}\n#mbptv div, #mbptv span { font-size: 100%; font-weight: inherit; }\n#mbptv img { display: block; }\n#mbptv [data-f] { outline: none; cursor: pointer; }\n\n/* Hidden modes (player, website): the root stays for toasts but never covers or blocks the site. */\n#mbptv.is-hidden { background: transparent; pointer-events: none; }\n#mbptv.is-hidden .mb-rail, #mbptv.is-hidden .mb-stage, #mbptv.is-hidden .mb-layer, #mbptv.is-hidden .mb-starting { display: none; }\n\n/* ---------- Icons ---------- */\n#mbptv .mb-ico, #mbptv-osd .mb-ico, #mbptv-pill .mb-ico { display: inline-block; width: 1.5em; height: 1.5em; line-height: 0; vertical-align: middle; }\n#mbptv .mb-ico svg, #mbptv-osd .mb-ico svg, #mbptv-pill .mb-ico svg { display: block; width: 100%; height: 100%; }\n\n/* ---------- Motion ---------- */\n@-webkit-keyframes mbSpin { from { -webkit-transform: rotate(0deg); } to { -webkit-transform: rotate(360deg); } }\n@keyframes mbSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }\n@-webkit-keyframes mbShimmer { from { -webkit-transform: translateX(-100%); } to { -webkit-transform: translateX(100%); } }\n@keyframes mbShimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }\n@-webkit-keyframes mbBlink { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }\n@keyframes mbBlink { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }\n@-webkit-keyframes mbFadeIn { from { opacity: 0; } to { opacity: 1; } }\n@-webkit-keyframes mbScreenIn { from { opacity: .4; } to { opacity: 1; } }\n@keyframes mbScreenIn { from { opacity: .4; } to { opacity: 1; } }\n@keyframes mbFadeIn { from { opacity: 0; } to { opacity: 1; } }\n@-webkit-keyframes mbSlideIn { from { -webkit-transform: translate3d(100%, 0, 0); } to { -webkit-transform: translate3d(0, 0, 0); } }\n@keyframes mbSlideIn { from { transform: translate3d(100%, 0, 0); } to { transform: translate3d(0, 0, 0); } }\n@-webkit-keyframes mbPop { from { opacity: 0; -webkit-transform: scale(.94); } to { opacity: 1; -webkit-transform: scale(1); } }\n@keyframes mbPop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }\n\n#mbptv.mb-reduce *, #mbptv.mb-reduce *:after, #mbptv-osd.mb-reduce, #mbptv-osd.mb-reduce *, #mbptv-ring.mb-reduce {\n  -webkit-transition: none !important;\n  transition: none !important;\n  -webkit-animation: none !important;\n  animation: none !important;\n}\n#mbptv.mb-reduce .mb-spinner-ring { -webkit-animation: mbSpin 1.2s linear infinite !important; animation: mbSpin 1.2s linear infinite !important; }\n/* TV performance mode (#mbptv.mb-perf) calms the costliest effects: see the end of this file. */\n\n/* ---------- Stage and screens ---------- */\n#mbptv .mb-stage { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv .mb-screen { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden; display: none; background: #07070a; }\n/* The incoming screen fades from 40%, never from black: no frame shows an empty stage between two screens. */\n#mbptv .mb-screen.is-current { display: block; -webkit-animation: mbScreenIn .22s ease-out; animation: mbScreenIn .22s ease-out; }\n\n/* ---------- Rail ---------- */\n#mbptv .mb-rail {\n  position: absolute; left: 0; top: 0; bottom: 0; width: 6.5em; z-index: 20;\n  -webkit-transition: width .2s cubic-bezier(.2, .8, .2, 1); transition: width .2s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv.no-rail .mb-rail { display: none; }\n#mbptv .mb-rail-bg {\n  position: absolute; left: 0; top: 0; bottom: 0; width: 120em; opacity: 0; pointer-events: none;\n  background: -webkit-linear-gradient(left, rgba(7, 7, 10, .98) 0%, rgba(7, 7, 10, .97) 19%, rgba(7, 7, 10, .84) 32%, rgba(7, 7, 10, .76) 100%);\n  background: linear-gradient(to right, rgba(7, 7, 10, .98) 0%, rgba(7, 7, 10, .97) 19%, rgba(7, 7, 10, .84) 32%, rgba(7, 7, 10, .76) 100%);\n  -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out;\n}\n#mbptv.rail-open .mb-rail { width: 19em; }\n#mbptv.rail-open .mb-rail-bg { opacity: 1; }\n#mbptv .mb-rail-head { position: absolute; left: 1.75em; top: 3.5em; height: 3em; white-space: nowrap; }\n#mbptv .mb-rail-brand {\n  position: absolute; left: 3.1em; top: .45em; font-size: 1.375em; font-weight: 700; letter-spacing: .01em; color: #f5f5f7;\n  opacity: 0; -webkit-transition: opacity .18s; transition: opacity .18s;\n}\n#mbptv.rail-open .mb-rail-brand { opacity: 1; }\n#mbptv .mb-rail-items { position: absolute; left: 1em; top: 50%; margin-top: -15.5em; width: 17em; }\n#mbptv .mb-rail-item {\n  position: relative; height: 3.5em; width: 4.5em; margin-bottom: .75em; border-radius: 1.75em; color: rgba(245, 245, 247, .62);\n  white-space: nowrap; overflow: hidden;\n  -webkit-transition: background-color .18s, color .18s, width .2s cubic-bezier(.2, .8, .2, 1); transition: background-color .18s, color .18s, width .2s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-rail-item .mb-ico { position: absolute; left: 1.5em; top: 1em; width: 1.5em; height: 1.5em; }\n#mbptv .mb-rail-label {\n  position: absolute; left: 3.6em; top: 1.05em; font-size: 1.25em; line-height: 1.12em; font-weight: 600; opacity: 0;\n  -webkit-transition: opacity .15s; transition: opacity .15s;\n}\n#mbptv.rail-open .mb-rail-item { width: 15em; }\n#mbptv.rail-open .mb-rail-label { opacity: 1; }\n#mbptv .mb-rail-item.is-active { color: #e7bd68; }\n#mbptv .mb-rail-item.is-focused { background: #f5f5f7; color: #07070a; }\n#mbptv .mb-rail-sep { height: 1.75em; }\n\n/* ---------- Monogram and brand ---------- */\n#mbptv .mb-mono, #mbptv-pill .mb-mono {\n  position: relative; width: 3em; height: 3em; border-radius: .8em; overflow: hidden;\n  background: #e7bd68;\n  background: -webkit-linear-gradient(315deg, #f3d48f 0%, #e7bd68 45%, #b98a35 100%);\n  background: linear-gradient(135deg, #f3d48f 0%, #e7bd68 45%, #b98a35 100%);\n  box-shadow: 0 .4em 1.2em rgba(231, 189, 104, .18);\n}\n#mbptv .mb-mono-m, #mbptv-pill .mb-mono-m {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; text-align: center; color: #1a1408;\n  font-size: 1.9em; line-height: 1.58em; font-weight: 800; letter-spacing: -.02em;\n}\n#mbptv .mb-mono--xl { width: 7em; height: 7em; border-radius: 1.8em; }\n#mbptv .mb-mono--xl .mb-mono-m { font-size: 4.4em; line-height: 1.6em; }\n\n/* ---------- Type ---------- */\n#mbptv .mb-display { font-size: 4.5em; line-height: 1.04; font-weight: 800; letter-spacing: -.015em; color: #f5f5f7; }\n#mbptv .mb-h1 { font-size: 3em; line-height: 1.12; font-weight: 700; letter-spacing: -.01em; color: #f5f5f7; }\n#mbptv .mb-section { font-size: 1.75em; line-height: 1.2; font-weight: 600; color: #f5f5f7; }\n#mbptv .mb-body { font-size: 1.5em; line-height: 1.45; font-weight: 400; color: rgba(245, 245, 247, .72); }\n#mbptv .mb-meta { font-size: 1.25em; line-height: 1.4; font-weight: 500; color: rgba(245, 245, 247, .72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-kicker { font-size: 1.0625em; line-height: 1.3; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #e7bd68; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-clamp2, #mbptv .mb-clamp3, #mbptv .mb-clamp4 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }\n#mbptv .mb-clamp2 { -webkit-line-clamp: 2; }\n#mbptv .mb-clamp3 { -webkit-line-clamp: 3; }\n#mbptv .mb-clamp4 { -webkit-line-clamp: 4; }\n\n/* ---------- Buttons ---------- */\n#mbptv .mb-btns { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }\n#mbptv .mb-btn {\n  display: -webkit-inline-box; display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center;\n  height: 3.75em; padding: 0 2em; margin-right: 1em; border-radius: 2em; white-space: nowrap;\n  background: rgba(255, 255, 255, .1); color: #f5f5f7;\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s, color .18s, box-shadow .18s;\n  transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s, color .18s, box-shadow .18s;\n}\n#mbptv .mb-btn--primary { background: rgba(245, 245, 247, .3); color: #fff; }\n#mbptv .mb-btn .mb-btn-ico { width: 1.5em; height: 1.5em; margin: 0 .75em 0 -.25em; }\n#mbptv .mb-btn-label { font-size: 1.375em; font-weight: 600; line-height: 1; letter-spacing: .005em; }\n#mbptv .mb-btn.is-focused {\n  background: #f5f5f7; color: #07070a;\n  -webkit-transform: scale(1.06); transform: scale(1.06);\n  box-shadow: 0 .8em 2em rgba(0, 0, 0, .55);\n}\n\n/* ---------- Chips ---------- */\n#mbptv .mb-chiprow { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; }\n#mbptv .mb-chip {\n  display: -webkit-inline-box; display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center;\n  height: 3.25em; padding: 0 1.5em; margin: 0 .875em .875em 0; border-radius: 2em; white-space: nowrap;\n  background: rgba(255, 255, 255, .1); color: rgba(245, 245, 247, .86);\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s, color .18s;\n  transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s, color .18s;\n}\n#mbptv .mb-chip-ico { width: 1.25em; height: 1.25em; margin-right: .6em; opacity: .7; }\n#mbptv .mb-chip-label { font-size: 1.25em; font-weight: 500; line-height: 1; }\n#mbptv .mb-chip.is-selected { background: rgba(231, 189, 104, .16); color: #e7bd68; }\n#mbptv .mb-chip.is-focused { background: #f5f5f7; color: #07070a; -webkit-transform: scale(1.06); transform: scale(1.06); box-shadow: 0 .6em 1.6em rgba(0, 0, 0, .5); }\n#mbptv .mb-chip.is-focused .mb-chip-ico { opacity: 1; }\n\n/* Static info chips (hero / detail). */\n#mbptv .mb-tags { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 2.25em; overflow: hidden; }\n#mbptv .mb-tag {\n  display: inline-block; height: 1.75em; line-height: 1.75em; padding: 0 .6em; margin-right: .75em; border-radius: .35em;\n  font-size: 1.0625em; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;\n  background: rgba(255, 255, 255, .14); color: #f5f5f7;\n}\n#mbptv .mb-tag--imdb { background: #f5c518; color: #000; letter-spacing: .02em; text-transform: none; }\n#mbptv .mb-tag--line { background: transparent; box-shadow: inset 0 0 0 .09em rgba(245, 245, 247, .5); color: rgba(245, 245, 247, .86); }\n#mbptv .mb-tag--gold { background: rgba(231, 189, 104, .18); color: #e7bd68; }\n#mbptv .mb-score { display: -webkit-inline-box; display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center; margin-right: 1.75em; white-space: nowrap; }\n#mbptv .mb-score-dot { width: .9em; height: .9em; border-radius: 50%; margin-right: .5em; background: #fa320a; }\n#mbptv .mb-score-dot--aud { background: #e7bd68; }\n#mbptv .mb-score-val { font-size: 1.375em; font-weight: 700; color: #f5f5f7; }\n#mbptv .mb-score-lbl { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); margin-left: .5em; }\n\n/* ---------- Cards ---------- */\n#mbptv .mb-card { position: relative; -webkit-flex-shrink: 0; flex-shrink: 0; margin-right: 1.5em; }\n#mbptv .mb-card--poster { width: 12em; }\n#mbptv .mb-card--poster .mb-card-art { height: 18em; }\n#mbptv .mb-card--grid { width: 15em; }\n#mbptv .mb-card--grid .mb-card-art { height: 22.5em; }\n#mbptv .mb-card--wide { width: 22em; }\n#mbptv .mb-card--wide .mb-card-art { height: 12.375em; }\n#mbptv .mb-card-art {\n  position: relative; width: 100%; border-radius: .5em; overflow: hidden; background: #131318;\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .18s;\n  transition: transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .18s;\n}\n#mbptv .mb-card-ph {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;\n  padding: 1em; text-align: center;\n  background: #16161c;\n  background: -webkit-linear-gradient(top, #1d1d25 0%, #131318 100%);\n  background: linear-gradient(to bottom, #1d1d25 0%, #131318 100%);\n}\n#mbptv .mb-card-ph-title { font-size: 1.375em; line-height: 1.25; font-weight: 700; color: rgba(245, 245, 247, .55); text-align: center; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }\n#mbptv .mb-img { opacity: 0; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out; }\n#mbptv .mb-img.is-loaded { opacity: 1; }\n#mbptv .mb-img.is-error { display: none; }\n#mbptv .mb-card-img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }\n#mbptv .mb-card-badge {\n  position: absolute; left: .6em; top: .6em; height: 1.7em; line-height: 1.7em; padding: 0 .5em; border-radius: .3em;\n  font-size: 1.0625em; font-weight: 800; letter-spacing: .06em; color: #07070a; background: rgba(245, 245, 247, .92);\n}\n#mbptv .mb-card-shade {\n  position: absolute; left: 0; right: 0; bottom: 0; height: 5em; padding: 0 .9em .9em;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: flex-end; justify-content: flex-end;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, 0) 100%);\n}\n#mbptv .mb-card-plabel { font-size: 1.0625em; font-weight: 700; letter-spacing: .04em; color: #f5f5f7; margin-bottom: .45em; }\n#mbptv .mb-progress { position: relative; height: .3em; border-radius: .15em; background: rgba(255, 255, 255, .28); overflow: hidden; }\n#mbptv .mb-progress-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: .15em; background: #e7bd68; }\n#mbptv .mb-card-title {\n  margin-top: .9em; font-size: 1.25em; line-height: 1.3; font-weight: 500; color: rgba(245, 245, 247, .62);\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  -webkit-transition: color .18s, -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: color .18s, transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-card-sub { margin-top: .3em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; overflow: hidden; height: 1.4em; }\n#mbptv .mb-card-sub span { display: inline-block; vertical-align: middle; }\n#mbptv .mb-card-star { width: .95em; height: .95em; margin: -.15em .3em 0 .9em; color: #e7bd68; vertical-align: middle; }\n#mbptv .mb-card.is-focused .mb-card-art {\n  -webkit-transform: scale(1.08); transform: scale(1.08);\n  box-shadow: 0 0 0 .22em #fff, 0 1.2em 2.4em rgba(0, 0, 0, .6);\n}\n#mbptv .mb-card.is-focused .mb-card-title { color: #fff; -webkit-transform: translate3d(0, .55em, 0); transform: translate3d(0, .55em, 0); }\n#mbptv .mb-card.is-focused .mb-card-sub { color: rgba(245, 245, 247, .72); -webkit-transform: translate3d(0, .55em, 0); transform: translate3d(0, .55em, 0); }\n#mbptv .mb-card--more .mb-card-art { background: rgba(255, 255, 255, .06); }\n#mbptv .mb-more-inner {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; color: rgba(245, 245, 247, .72);\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;\n}\n#mbptv .mb-more-ico { width: 3em; height: 3em; margin-bottom: .6em; }\n#mbptv .mb-more-label { font-size: 1.375em; font-weight: 600; }\n#mbptv .mb-card--more.is-focused .mb-card-art { background: #f5f5f7; }\n#mbptv .mb-card--more.is-focused .mb-more-inner { color: #07070a; }\n\n/* ---------- Skeletons, spinner, empty states ---------- */\n#mbptv .mb-skel { position: relative; overflow: hidden; background: #15151b; border-radius: .5em; }\n#mbptv .mb-skel:after {\n  content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  background: -webkit-linear-gradient(left, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, .045) 50%, rgba(255, 255, 255, 0) 100%);\n  background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, .045) 50%, rgba(255, 255, 255, 0) 100%);\n  -webkit-animation: mbShimmer 1.5s ease-in-out infinite; animation: mbShimmer 1.5s ease-in-out infinite;\n}\n#mbptv .mb-skel-line { height: 1.1em; width: 70%; margin-top: 1em; border-radius: .3em; }\n#mbptv .mb-skel-title { height: 4.2em; width: 34em; margin-bottom: 1.2em; border-radius: .5em; }\n#mbptv .mb-skel-meta { height: 1.4em; width: 24em; margin-bottom: 1.4em; border-radius: .3em; }\n#mbptv .mb-skel-text { height: 1.3em; width: 44em; margin-bottom: .8em; border-radius: .3em; }\n#mbptv .mb-skel-text.is-short { width: 30em; }\n#mbptv .mb-spinner { position: relative; width: 3.5em; height: 3.5em; }\n#mbptv .mb-spinner-ring {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 50%;\n  border: .3em solid rgba(255, 255, 255, .14); border-top-color: #e7bd68;\n  -webkit-animation: mbSpin .9s linear infinite; animation: mbSpin .9s linear infinite;\n}\n#mbptv .mb-spinner--sm { width: 2.25em; height: 2.25em; }\n#mbptv .mb-empty { padding: 3em 0 0; max-width: 56em; }\n#mbptv .mb-empty .mb-empty-ico { width: 4em; height: 4em; color: rgba(245, 245, 247, .3); margin-bottom: 1.5em; }\n#mbptv .mb-empty .mb-section { margin-bottom: .6em; }\n#mbptv .mb-empty .mb-body { margin-bottom: 2em; }\n#mbptv .mb-empty--inline { padding: 1.5em 0 1em; white-space: normal; }\n#mbptv .mb-empty--inline .mb-body { margin-bottom: 1em; }\n#mbptv .mb-grid-note { width: 100%; -webkit-flex-basis: 100%; flex-basis: 100%; padding: 1.5em 0 3em; }\n#mbptv .mb-grid-note .mb-body { margin-bottom: 1em; }\n\n/* ---------- Loading screen ---------- */\n#mbptv .mb-loading {\n  background: #07070a;\n  background: -webkit-radial-gradient(50% 42%, circle, #17140d 0%, #07070a 55%);\n  background: radial-gradient(circle at 50% 42%, #17140d 0%, #07070a 55%);\n}\n#mbptv .mb-loading-inner {\n  position: absolute; left: 0; right: 0; top: 50%; margin-top: -9em; text-align: center;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center;\n}\n#mbptv .mb-wordmark { margin-top: 1.4em; font-size: 2.5em; font-weight: 800; letter-spacing: -.01em; color: #f5f5f7; }\n#mbptv .mb-wordmark span { color: #e7bd68; }\n#mbptv .mb-loading .mb-spinner { margin-top: 2.5em; }\n#mbptv .mb-loading-msg { margin-top: 1.5em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); height: 1.4em; }\n\n/* ---------- Home ---------- */\n#mbptv .mb-hero { position: absolute; left: 0; top: 0; width: 100%; height: 74%; overflow: hidden; }\n#mbptv .mb-art { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv .mb-art-img {\n  position: absolute; right: 0; top: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 25%;\n  -webkit-transition: opacity .6s ease-out; transition: opacity .6s ease-out;\n}\n#mbptv .mb-art-poster {\n  position: absolute; right: -4%; top: -30%; width: 70%; height: 160%; object-fit: cover; opacity: 0;\n  -webkit-transition: opacity .6s ease-out; transition: opacity .6s ease-out;\n}\n#mbptv .mb-art-poster.is-loaded { opacity: .35; }\n#mbptv .mb-scrim-l {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  background: -webkit-linear-gradient(left, #07070a 0%, rgba(7, 7, 10, .85) 35%, rgba(7, 7, 10, 0) 70%);\n  background: linear-gradient(to right, #07070a 0%, rgba(7, 7, 10, .85) 35%, rgba(7, 7, 10, 0) 70%);\n}\n#mbptv .mb-scrim-b {\n  position: absolute; left: 0; bottom: 0; width: 100%; height: 55%;\n  background: -webkit-linear-gradient(bottom, #07070a 0%, rgba(7, 7, 10, .7) 40%, rgba(7, 7, 10, 0) 100%);\n  background: linear-gradient(to top, #07070a 0%, rgba(7, 7, 10, .7) 40%, rgba(7, 7, 10, 0) 100%);\n}\n#mbptv .mb-scrim-t {\n  position: absolute; left: 0; top: 0; width: 100%; height: 18%;\n  background: -webkit-linear-gradient(top, rgba(7, 7, 10, .55) 0%, rgba(7, 7, 10, 0) 100%);\n  background: linear-gradient(to bottom, rgba(7, 7, 10, .55) 0%, rgba(7, 7, 10, 0) 100%);\n}\n#mbptv .mb-hero-info {\n  position: absolute; left: 9em; top: 3.5em; width: 58em; height: 32.5em;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: flex-end; justify-content: flex-end;\n}\n#mbptv .mb-hero-text { -webkit-transition: opacity .2s ease-out, -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: opacity .2s ease-out, transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-home.in-rows .mb-hero-text { -webkit-transform: translate3d(0, -3.5em, 0); transform: translate3d(0, -3.5em, 0); }\n#mbptv .mb-home.in-rows .mb-hero-info .mb-btns { visibility: hidden; }\n#mbptv .mb-hero-text.is-swapping { opacity: 0; }\n#mbptv .mb-hero-info .mb-kicker { margin-bottom: .9em; }\n#mbptv .mb-hero-info .mb-display { margin-bottom: .22em; max-height: 2.1em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }\n#mbptv .mb-hero-info .mb-meta { margin-bottom: .9em; height: 1.4em; }\n#mbptv .mb-hero-info .mb-tags { margin-bottom: 1em; }\n#mbptv .mb-hero-info .mb-tag--imdb { font-size: 1.25em; height: 1.7em; line-height: 1.7em; }\n#mbptv .mb-hero-info .mb-body { width: 27em; margin-bottom: 1.1em; height: 4.35em; }\n#mbptv .mb-hero-resume { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 1.2em; height: 1.6em; }\n#mbptv .mb-hero-resume .mb-progress { width: 14em; margin-right: 1em; }\n#mbptv .mb-hero-resume .mb-meta { margin: 0; height: auto; }\n#mbptv .mb-hero-info .mb-btns { height: 4.5em; margin-left: -.1em; }\n#mbptv .mb-rows-port { position: absolute; left: 0; right: 0; top: 60.5%; bottom: 0; -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-home.in-rows .mb-rows-port { -webkit-transform: translate3d(0, -8em, 0); transform: translate3d(0, -8em, 0); }\n#mbptv .mb-rows { position: absolute; left: 0; top: 0; width: 100%; -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-row { position: relative; padding-bottom: 3.25em; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out; }\n#mbptv .mb-row.is-past { opacity: 0; }\n#mbptv .mb-row-title { margin: 0 0 .45em 5.143em; font-size: 1.75em; line-height: 1.2; font-weight: 600; color: rgba(245, 245, 247, .9); white-space: nowrap; }\n#mbptv .mb-row-view { position: relative; margin-left: 7.75em; padding: 1em 0 2.5em; margin-top: -1em; margin-bottom: -2.5em; overflow: hidden; }\n#mbptv .mb-track {\n  position: relative; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start;\n  padding: 0 5em 0 1.25em; white-space: nowrap;\n  -webkit-transition: -webkit-transform .26s cubic-bezier(.2, .8, .2, 1); transition: transform .26s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-row--wide .mb-card-title, #mbptv .mb-row--wide .mb-card-ph-title { display: none; }\n#mbptv .mb-card-label {\n  position: absolute; left: 0; right: 0; bottom: 0; padding: 2.4em .9em .7em; font-size: 1.25em; line-height: 1.3; font-weight: 700; color: #fff;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .78) 0%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .78) 0%, rgba(0, 0, 0, 0) 100%);\n}\n#mbptv .mb-card-label:empty { display: none; }\n\n/* ---------- Detail ---------- */\n#mbptv .mb-backdrop { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden; }\n#mbptv .mb-backdrop .mb-art-img { width: 100%; height: 100%; }\n#mbptv .mb-detail .mb-scrim-l {\n  background: -webkit-linear-gradient(left, #07070a 0%, rgba(7, 7, 10, .9) 30%, rgba(7, 7, 10, .35) 62%, rgba(7, 7, 10, 0) 85%);\n  background: linear-gradient(to right, #07070a 0%, rgba(7, 7, 10, .9) 30%, rgba(7, 7, 10, .35) 62%, rgba(7, 7, 10, 0) 85%);\n}\n#mbptv .mb-detail .mb-scrim-b { height: 70%; }\n#mbptv .mb-dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(7, 7, 10, .55); opacity: 0; -webkit-transition: opacity .3s ease-out; transition: opacity .3s ease-out; }\n#mbptv .is-scrolled .mb-dim { opacity: 1; }\n#mbptv .is-scrolled .mb-detail-top { opacity: 0; }\n#mbptv .mb-detail-mini {\n  position: absolute; left: 9em; top: 3.5em; width: 64em; height: 14.4em; overflow: hidden; z-index: 2; pointer-events: none; opacity: 0;\n  -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out;\n}\n#mbptv .mb-detail-mini .mb-kicker { margin-bottom: .35em; }\n#mbptv .mb-mini-title { font-size: 2.5em; line-height: 1.15; font-weight: 800; letter-spacing: -.01em; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-mini-meta { margin-top: .35em; font-size: 1.25em; line-height: 1.4; font-weight: 500; color: rgba(245, 245, 247, .72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-mini-body {\n  margin-top: .55em; max-width: 41em; height: 4.35em; font-size: 1.5em; line-height: 1.45; color: rgba(245, 245, 247, .72);\n  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;\n}\n#mbptv .is-scrolled .mb-detail-mini { opacity: 1; }\n#mbptv .mb-detail-poster {\n  position: absolute; right: 7em; top: 9em; width: 24em; height: 36em; border-radius: .75em; overflow: hidden; background: #131318;\n  box-shadow: 0 2em 5em rgba(0, 0, 0, .7);\n}\n#mbptv .mb-detail-poster img { width: 100%; height: 100%; object-fit: cover; }\n#mbptv .mb-vport { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv .mb-vscroll { position: absolute; left: 0; top: 0; width: 100%; -webkit-transition: -webkit-transform .32s cubic-bezier(.2, .8, .2, 1); transition: transform .32s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-detail-top {\n  height: 52em; padding: 0 0 2.5em 9em; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: flex-end; justify-content: flex-end;\n}\n#mbptv .mb-detail-info { width: 64em; }\n#mbptv .mb-detail-info .mb-kicker { margin-bottom: .9em; }\n#mbptv .mb-detail-info .mb-display { margin-bottom: .25em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-height: 2.1em; width: 14.5em; }\n#mbptv .mb-detail-info .mb-meta { margin-bottom: 1.1em; }\n#mbptv .mb-ratings { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 1.3em; min-height: 2.2em; }\n#mbptv .mb-ratings .mb-tag--imdb { font-size: 1.25em; height: 1.7em; line-height: 1.7em; margin-right: 1.4em; }\n#mbptv .mb-detail-info .mb-body { width: 30em; margin-bottom: 1.2em; }\n#mbptv .mb-detail-info .mb-tags { margin-bottom: 1.8em; }\n#mbptv .mb-detail-info .mb-btns { height: 4.5em; }\n#mbptv .mb-detail-rows { padding-bottom: 12em; }\n#mbptv .mb-detail-rows .mb-row { padding-bottom: 2.5em; }\n#mbptv .mb-track.mb-seasons { padding-top: .5em; -webkit-flex-wrap: nowrap; flex-wrap: nowrap; -webkit-align-items: center; align-items: center; }\n#mbptv .mb-row--seasons { padding-bottom: 1.25em; }\n#mbptv .mb-episode .mb-ep-code { position: absolute; left: .8em; bottom: .7em; font-size: 1.0625em; font-weight: 800; letter-spacing: .06em; color: #fff; }\n#mbptv .mb-episode .mb-card-shade { height: 4em; }\n#mbptv .mb-ep-title { margin-top: .9em; font-size: 1.375em; line-height: 1.3; font-weight: 600; color: rgba(245, 245, 247, .86); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-transition: -webkit-transform .18s; transition: transform .18s; }\n#mbptv .mb-ep-meta { margin-top: .2em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-episode.is-focused .mb-ep-title { color: #fff; -webkit-transform: translate3d(0, .45em, 0); transform: translate3d(0, .45em, 0); }\n#mbptv .mb-episode.is-focused .mb-ep-meta { color: rgba(245, 245, 247, .72); -webkit-transform: translate3d(0, .5em, 0); transform: translate3d(0, .5em, 0); }\n#mbptv .mb-episode .mb-ep-play {\n  position: absolute; left: 50%; top: 50%; width: 3.6em; height: 3.6em; margin: -1.8em 0 0 -1.8em; border-radius: 50%;\n  background: rgba(7, 7, 10, .55); color: #fff; opacity: 0; -webkit-transition: opacity .18s; transition: opacity .18s;\n}\n#mbptv .mb-episode .mb-ep-play .mb-ico { position: absolute; left: 1.1em; top: .95em; width: 1.7em; height: 1.7em; }\n#mbptv .mb-episode.is-focused .mb-ep-play { opacity: 1; }\n#mbptv .mb-cast { display: -webkit-box; display: -webkit-flex; display: flex; }\n#mbptv .mb-person {\n  -webkit-flex-shrink: 0; flex-shrink: 0; margin-right: 1em; padding: .85em 1.6em .95em; border-radius: 1em; background: rgba(255, 255, 255, .08); max-width: 22em;\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s; transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s;\n}\n#mbptv .mb-person-name { font-size: 1.375em; font-weight: 600; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-person-role { margin-top: .15em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-person.is-focused { background: #f5f5f7; -webkit-transform: scale(1.06); transform: scale(1.06); }\n#mbptv .mb-person.is-focused .mb-person-name { color: #07070a; }\n#mbptv .mb-person.is-focused .mb-person-role { color: rgba(7, 7, 10, .6); }\n\n/* ---------- Page header (settings / diagnostics) ---------- */\n#mbptv .mb-page-head { position: absolute; left: 9em; top: 3.5em; right: 5em; }\n#mbptv .mb-page-head .mb-kicker { margin-bottom: .6em; }\n#mbptv .mb-page-head .mb-meta { margin-top: .5em; color: rgba(245, 245, 247, .6); }\n\n/* ---------- Browse ---------- */\n#mbptv .mb-browse-head { padding: 3.5em 5em 0 9em; margin-bottom: 1.75em; }\n#mbptv .mb-browse-head .mb-kicker { margin-bottom: .6em; }\n#mbptv .mb-browse-head .mb-meta { margin-top: .4em; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-browse-tabs { padding: 0 5em 0 9em; margin-bottom: 1.25em; }\n#mbptv .mb-grid {\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-items: flex-start; align-items: flex-start;\n}\n#mbptv .mb-browse .mb-grid { padding: .75em 0 0 9em; width: 102em; }\n#mbptv .mb-browse .mb-grid .mb-card { margin: 0 4.25em 2.5em 0; }\n#mbptv .mb-browse .mb-grid .mb-card:nth-child(5n) { margin-right: 0; }\n#mbptv .mb-grid-foot { height: 8em; padding-left: 9em; }\n#mbptv .mb-grid-foot .mb-spinner { margin-top: 1em; }\n#mbptv .mb-browse .mb-empty { padding-left: 9em; }\n#mbptv .mb-browse .mb-grid .mb-empty { padding-left: 0; }\n\n/* ---------- Search ---------- */\n#mbptv .mb-search-left { position: absolute; left: 9em; top: 3.5em; width: 34em; bottom: 0; }\n#mbptv .mb-query-line {\n  position: relative; height: 5em; margin-bottom: 1.25em; white-space: nowrap; overflow: hidden;\n  box-shadow: inset 0 -.14em 0 rgba(245, 245, 247, .18);\n}\n#mbptv .mb-query-line .mb-q-ico { position: absolute; left: 0; top: 1.2em; width: 2em; height: 2em; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-query-text { position: absolute; left: 3em; right: 0; top: .7em; height: 3.4em; overflow: hidden; white-space: nowrap; }\n#mbptv #mbptv-query { display: inline-block; vertical-align: top; font-size: 2.5em; line-height: 1.3; font-weight: 600; color: #f5f5f7; white-space: pre; }\n#mbptv .mb-caret { display: inline-block; vertical-align: top; width: .2em; height: 2.7em; margin: .3em 0 0 .15em; border-radius: .1em; background: #e7bd68; -webkit-animation: mbBlink 1.05s step-end infinite; animation: mbBlink 1.05s step-end infinite; }\n#mbptv .mb-placeholder { position: absolute; left: 1.55em; top: .45em; font-size: 2em; line-height: 1.3; font-weight: 500; color: rgba(245, 245, 247, .5); display: none; }\n#mbptv .mb-query-line.is-empty .mb-placeholder { display: block; }\n#mbptv .mb-keyboard { width: 35em; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; }\n#mbptv .mb-key {\n  width: 5em; height: 3.4em; margin: 0 .8em .7em 0; border-radius: .6em; background: rgba(255, 255, 255, .08); color: #f5f5f7;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;\n  -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1), background-color .15s, color .15s; transition: transform .15s cubic-bezier(.2, .8, .2, 1), background-color .15s, color .15s;\n}\n#mbptv .mb-key-label { font-size: 1.625em; font-weight: 600; line-height: 1; text-transform: uppercase; }\n#mbptv .mb-key .mb-ico { width: 1.6em; height: 1.6em; }\n#mbptv .mb-key--wide { width: 10.8em; }\n#mbptv .mb-key--wide .mb-key-label { font-size: 1.25em; text-transform: none; margin-left: .5em; }\n#mbptv .mb-key--go { width: 34em; margin-top: .3em; height: 3.6em; border-radius: 2em; background: rgba(231, 189, 104, .18); color: #e7bd68; }\n#mbptv .mb-key--go .mb-key-label { font-size: 1.375em; text-transform: none; margin-left: .6em; }\n#mbptv .mb-key.is-focused { background: #f5f5f7; color: #07070a; -webkit-transform: scale(1.08); transform: scale(1.08); box-shadow: 0 .5em 1.4em rgba(0, 0, 0, .5); }\n#mbptv .mb-key--go.is-focused { -webkit-transform: scale(1.03); transform: scale(1.03); }\n#mbptv .mb-suggest-box { position: absolute; left: 0; right: 5em; top: 5.5em; bottom: 0; }\n#mbptv .mb-suggest-hint { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .72); padding-top: .4em; }\n#mbptv .mb-keyboard, #mbptv .mb-caret { -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv .mb-search.in-results .mb-keyboard { opacity: .35; }\n#mbptv .mb-search.in-results .mb-caret { visibility: hidden; }\n#mbptv .mb-srow {\n  position: relative; height: 4.25em; width: 44em; padding: 0 1.25em 0 4.2em; margin: 0 0 .5em -1.25em; border-radius: .8em; color: rgba(245, 245, 247, .86); white-space: nowrap; overflow: hidden;\n  background: rgba(255, 255, 255, .05);\n  -webkit-transition: background-color .15s, color .15s, -webkit-transform .15s; transition: background-color .15s, color .15s, transform .15s;\n}\n#mbptv .mb-srow .mb-ico { position: absolute; left: 1.35em; top: 1.25em; width: 1.75em; height: 1.75em; opacity: .55; }\n#mbptv .mb-srow-label { display: block; font-size: 1.75em; line-height: 2.43em; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-search-right { position: absolute; left: 47em; right: 0; top: 3.5em; bottom: 0; }\n#mbptv .mb-results-head { height: 5em; padding-top: .35em; white-space: nowrap; overflow: hidden; }\n#mbptv .mb-results-head .mb-section { font-size: 2.25em; font-weight: 700; display: inline-block; max-width: 24em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }\n#mbptv .mb-results-head .mb-count { display: inline-block; margin-left: 1em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); vertical-align: bottom; line-height: 2.2; }\n#mbptv .mb-search-tabs { height: 4.5em; margin-bottom: .25em; }\n#mbptv .mb-grid-port { position: absolute; left: -1.5em; right: 0; top: 10em; bottom: 0; overflow: hidden; }\n#mbptv .mb-search .mb-grid { padding: 1em 0 12em 1.5em; -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-search .mb-grid .mb-card { margin: 0 2em 2.25em 0; }\n#mbptv .mb-search .mb-grid .mb-card:nth-child(4n) { margin-right: 0; }\n#mbptv .mb-discover { padding-top: .35em; width: 66em; }\n#mbptv .mb-discover .mb-section { margin-bottom: 1em; }\n#mbptv .mb-discover .mb-chiprow { margin-bottom: 2.25em; }\n#mbptv .mb-discover-hint { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .72); margin-bottom: 2.4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n/* ---------- Settings ---------- */\n#mbptv .mb-settings-body { position: absolute; left: 9em; top: 13em; right: 5em; bottom: 3em; }\n#mbptv .mb-list { width: 58em; }\n#mbptv .mb-lrow {\n  position: relative; height: 4.75em; margin-bottom: .5em; padding: 0 1.75em 0 5em; border-radius: .8em; background: rgba(255, 255, 255, .035); color: rgba(245, 245, 247, .8);\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;\n  -webkit-transition: background-color .15s, color .15s, -webkit-transform .15s; transition: background-color .15s, color .15s, transform .15s;\n}\n#mbptv .mb-lrow > .mb-ico { position: absolute; left: 1.75em; top: 1.6em; width: 1.6em; height: 1.6em; opacity: .7; }\n#mbptv .mb-lrow-label { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; font-size: 1.5em; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-lrow-value { font-size: 1.375em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; margin-left: 1em; }\n#mbptv .mb-lrow-chev { width: 1.5em; height: 1.5em; margin-left: .6em; opacity: .5; }\n#mbptv .mb-toggle { position: relative; width: 3.6em; height: 2em; border-radius: 1em; background: rgba(255, 255, 255, .2); margin-left: 1em; -webkit-transition: background-color .18s; transition: background-color .18s; }\n#mbptv .mb-toggle-knob { position: absolute; left: .2em; top: .2em; width: 1.6em; height: 1.6em; border-radius: 50%; background: #f5f5f7; -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: transform .18s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-toggle.is-on { background: #35c46a; }\n#mbptv .mb-toggle.is-on .mb-toggle-knob { -webkit-transform: translate3d(1.6em, 0, 0); transform: translate3d(1.6em, 0, 0); }\n#mbptv .mb-aside { position: absolute; left: 64em; top: 0; right: 0; }\n#mbptv .mb-aside .mb-ico { width: 3.5em; height: 3.5em; color: #e7bd68; margin-bottom: 1.25em; }\n#mbptv .mb-aside .mb-section { margin-bottom: .6em; }\n#mbptv .mb-aside .mb-body { max-width: 30em; }\n#mbptv .mb-about { position: absolute; left: 0; bottom: 0; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; }\n\n/* ---------- Diagnostics ---------- */\n#mbptv .mb-diag-facts { position: absolute; left: 9em; top: 14.5em; width: 44em; }\n#mbptv .mb-fact { margin-bottom: 1.1em; }\n#mbptv .mb-fact-k { font-size: 1.25em; font-weight: 600; color: rgba(245, 245, 247, .6); margin-bottom: .15em; }\n#mbptv .mb-fact-v { font-size: 1.5em; font-weight: 500; color: #f5f5f7; word-wrap: break-word; line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }\n#mbptv .mb-fact-v.is-warn { color: #e7bd68; }\n#mbptv .mb-diag-facts .mb-btns { margin-top: 1.5em; }\n#mbptv .mb-diag-log { position: absolute; left: 56em; right: 5em; top: 14.5em; bottom: 3em; overflow: hidden; border-radius: 1em; background: rgba(255, 255, 255, .04); }\n#mbptv .mb-diag-lines { padding: 1em; -webkit-transition: -webkit-transform .2s ease-out; transition: transform .2s ease-out; }\n#mbptv .mb-logline { padding: .5em .8em; border-radius: .5em; font-family: Consolas, \"DejaVu Sans Mono\", monospace; font-size: 1.375em; line-height: 1.35; color: rgba(245, 245, 247, .72); word-wrap: break-word; }\n#mbptv .mb-logline.is-error { color: #ff8a73; }\n#mbptv .mb-logline.is-warn { color: #e7bd68; }\n#mbptv .mb-srow.is-focused, #mbptv .mb-lrow.is-focused, #mbptv .mb-logline.is-focused { background: #f5f5f7; color: #07070a; box-shadow: none; -webkit-transform: scale(1.02); transform: scale(1.02); }\n#mbptv .mb-srow.is-focused .mb-ico, #mbptv .mb-lrow.is-focused > .mb-ico { opacity: 1; }\n#mbptv .mb-lrow.is-focused .mb-lrow-value { color: rgba(7, 7, 10, .6); }\n#mbptv .mb-lrow.is-focused .mb-toggle { background: rgba(7, 7, 10, .28); }\n#mbptv .mb-lrow.is-focused .mb-toggle.is-on { background: #35c46a; }\n\n/* ---------- Sign-in, error, generic centred states ---------- */\n#mbptv .mb-signin {\n  background: #07070a;\n  background: -webkit-radial-gradient(50% 30%, circle, #1c170c 0%, #0b0a0c 45%, #07070a 70%);\n  background: radial-gradient(circle at 50% 30%, #1c170c 0%, #0b0a0c 45%, #07070a 70%);\n}\n#mbptv .mb-center { position: absolute; left: 50%; top: 50%; width: 52em; margin-left: -26em; -webkit-transform: translate3d(0, -50%, 0); transform: translate3d(0, -50%, 0); text-align: center; }\n#mbptv .mb-center .mb-mono { margin: 0 auto 2em; }\n#mbptv .mb-center .mb-h1 { text-align: center; margin-bottom: .5em; }\n#mbptv .mb-center .mb-body { text-align: center; margin: 0 auto 2.5em; max-width: 42em; }\n#mbptv .mb-stack { width: 30em; margin: 0 auto; }\n#mbptv .mb-stack .mb-btn { width: 100%; margin: 0 0 1em; -webkit-justify-content: center; justify-content: center; height: 4em; }\n#mbptv .mb-note { margin-top: 1.5em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); text-align: center; line-height: 1.5; }\n#mbptv .mb-state { position: absolute; left: 9em; top: 50%; width: 70em; -webkit-transform: translate3d(0, -50%, 0); transform: translate3d(0, -50%, 0); }\n#mbptv .mb-state .mb-state-ico { width: 4.5em; height: 4.5em; color: #e7bd68; margin-bottom: 1.75em; }\n#mbptv .mb-state .mb-h1 { margin-bottom: .45em; }\n#mbptv .mb-state .mb-body { max-width: 46em; margin-bottom: .6em; }\n#mbptv .mb-state .mb-code { font-size: 1.0625em; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: rgba(245, 245, 247, .6); margin-bottom: 2.5em; }\n\n/* ---------- Layers: sheet and dialog ---------- */\n#mbptv .mb-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 40; }\n#mbptv .mb-layer-dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, .72); -webkit-animation: mbFadeIn .2s ease-out; animation: mbFadeIn .2s ease-out; }\n#mbptv .mb-sheet {\n  position: absolute; right: 0; top: 0; bottom: 0; width: 40em; padding: 4em 4em 3em 3.5em; background: #131318;\n  box-shadow: -2em 0 5em rgba(0, 0, 0, .55);\n  -webkit-animation: mbSlideIn .26s cubic-bezier(.2, .8, .2, 1); animation: mbSlideIn .26s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-sheet .mb-kicker { margin-bottom: .6em; }\n#mbptv .mb-sheet .mb-h1 { font-size: 2.25em; margin-bottom: .35em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-sheet-sub { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); margin-bottom: 1.8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-sheet-port { position: absolute; left: 2.5em; right: 3em; top: 14.5em; bottom: 6em; overflow: hidden; }\n#mbptv .mb-sheet-list { padding: 1em; -webkit-transition: -webkit-transform .22s ease-out; transition: transform .22s ease-out; }\n#mbptv .mb-source {\n  position: relative; min-height: 5.75em; margin-bottom: .75em; padding: 1.05em 1.25em 1.05em 7.5em; border-radius: .9em; background: rgba(255, 255, 255, .05);\n  -webkit-transition: background-color .15s, -webkit-transform .15s; transition: background-color .15s, transform .15s;\n}\n#mbptv .mb-qbadge {\n  position: absolute; left: 1.25em; top: 1.4em; width: 5.2em; height: 2.2em; line-height: 2.2em; text-align: center; border-radius: .4em;\n  font-size: 1.0625em; font-weight: 800; letter-spacing: .04em; background: rgba(255, 255, 255, .14); color: #f5f5f7;\n}\n#mbptv .mb-qbadge.is-4k { background: #e7bd68; color: #1a1408; }\n#mbptv .mb-qbadge.is-1080 { background: rgba(245, 245, 247, .16); color: #f5f5f7; }\n#mbptv .mb-source-file { font-size: 1.25em; line-height: 1.35; font-weight: 600; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-source-meta { margin-top: .3em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; }\n#mbptv .mb-source-pref { position: absolute; right: 1.25em; bottom: 1.1em; font-size: 1.0625em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #35c46a; }\n#mbptv .mb-source.is-focused { background: #f5f5f7; -webkit-transform: scale(1.02); transform: scale(1.02); }\n#mbptv .mb-source.is-focused .mb-source-file { color: #07070a; }\n#mbptv .mb-source.is-focused .mb-source-meta { color: rgba(7, 7, 10, .6); }\n#mbptv .mb-source.is-focused .mb-qbadge { background: #07070a; color: #f5f5f7; }\n#mbptv .mb-source.is-focused .mb-source-pref { color: #1f8a46; }\n#mbptv .mb-opt { position: relative; height: 4.25em; margin-bottom: .6em; padding: 0 1.5em; border-radius: .8em; background: rgba(255, 255, 255, .05); display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }\n#mbptv .mb-opt-label { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; font-size: 1.5em; font-weight: 500; }\n#mbptv .mb-opt .mb-ico { width: 1.6em; height: 1.6em; color: #35c46a; }\n#mbptv .mb-opt.is-focused { background: #f5f5f7; color: #07070a; }\n#mbptv .mb-opt.is-focused .mb-ico { color: #1f8a46; }\n#mbptv .mb-sheet-label { margin: 1.6em 0 .9em .15em; font-size: 1.0625em; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-sheet-hint { position: absolute; left: 3.5em; bottom: 2.5em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-dialog {\n  position: absolute; left: 50%; top: 50%; width: 46em; margin: -12em 0 0 -23em; padding: 3.5em 3.5em 3em; border-radius: 1.25em; background: #1c1c23; text-align: center;\n  box-shadow: 0 2em 6em rgba(0, 0, 0, .7);\n  -webkit-animation: mbPop .2s cubic-bezier(.2, .8, .2, 1); animation: mbPop .2s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-dialog .mb-h1 { font-size: 2.5em; text-align: center; margin-bottom: .4em; }\n#mbptv .mb-dialog .mb-body { text-align: center; margin-bottom: 2em; }\n#mbptv .mb-dialog .mb-btns { -webkit-justify-content: center; justify-content: center; }\n#mbptv .mb-dialog .mb-btn { min-width: 12em; -webkit-justify-content: center; justify-content: center; margin: 0 .6em; }\n\n/* ---------- Starting-playback overlay ---------- */\n#mbptv .mb-starting { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 35; background: #07070a; -webkit-animation: mbFadeIn .2s ease-out; animation: mbFadeIn .2s ease-out; }\n#mbptv .mb-starting .mb-art-img { width: 100%; }\n#mbptv .mb-starting .mb-art-img.is-loaded { opacity: .5; }\n#mbptv .mb-starting-inner { position: absolute; left: 9em; bottom: 8em; width: 70em; }\n#mbptv .mb-starting-inner .mb-spinner { margin-bottom: 2.25em; }\n#mbptv .mb-starting-inner .mb-kicker { margin-bottom: .8em; }\n#mbptv .mb-starting-inner .mb-display { margin-bottom: .35em; }\n#mbptv .mb-starting-inner .mb-meta { color: rgba(245, 245, 247, .6); }\n\n/* ---------- Toast ---------- */\n#mbptv .mb-toast {\n  position: absolute; left: 50%; bottom: 4em; z-index: 60; max-width: 70em; padding: 1em 2em; border-radius: 2em; background: rgba(28, 28, 35, .96); color: #f5f5f7;\n  font-size: 1.375em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  box-shadow: 0 1em 3em rgba(0, 0, 0, .6);\n  opacity: 0; visibility: hidden;\n  -webkit-transform: translate3d(-50%, 1em, 0); transform: translate3d(-50%, 1em, 0);\n  -webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out, visibility 0s linear .2s; transition: opacity .2s ease-out, transform .2s ease-out, visibility 0s linear .2s;\n}\n#mbptv .mb-toast.is-visible {\n  opacity: 1; visibility: visible; -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0);\n  -webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out; transition: opacity .2s ease-out, transform .2s ease-out;\n}\n\n/* ---------- Player OSD (top level) ---------- */\n#mbptv-osd {\n  position: fixed; left: 0; right: 0; bottom: 0; height: 17em; z-index: 2147483001; pointer-events: none; color: #f5f5f7; line-height: 1.3;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .88) 0%, rgba(0, 0, 0, .55) 55%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .88) 0%, rgba(0, 0, 0, .55) 55%, rgba(0, 0, 0, 0) 100%);\n  opacity: 0; visibility: hidden;\n  -webkit-transition: opacity .25s ease-out, visibility 0s linear .25s; transition: opacity .25s ease-out, visibility 0s linear .25s;\n}\n#mbptv-osd.is-visible { opacity: 1; visibility: visible; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-osd div, #mbptv-osd span { margin: 0; padding: 0; border: 0; -webkit-box-sizing: border-box; box-sizing: border-box; font-family: inherit; color: inherit; font-size: 100%; }\n#mbptv-osd .mbo-inner { position: absolute; left: 5em; right: 5em; bottom: 3em; }\n#mbptv-osd .mbo-title { font-size: 2em; font-weight: 700; margin-bottom: .7em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-osd .mbo-sub { font-size: 1.375em; font-weight: 500; color: rgba(245, 245, 247, .72); margin: -.6em 0 .8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-osd .mbo-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }\n#mbptv-osd .mbo-state { width: 2.2em; height: 2.2em; margin-right: 1.25em; }\n#mbptv-osd .mbo-state .mb-ico { width: 100%; height: 100%; }\n#mbptv-osd .mbo-spin { display: block; width: 100%; height: 100%; border-radius: 50%; border: .22em solid rgba(255, 255, 255, .2); border-top-color: #e7bd68; -webkit-animation: mbSpin .9s linear infinite; animation: mbSpin .9s linear infinite; }\n#mbptv-osd.mb-reduce .mbo-spin { -webkit-animation: mbSpin 1.2s linear infinite !important; animation: mbSpin 1.2s linear infinite !important; }\n#mbptv-osd .mbo-bar { position: relative; -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: .45em; border-radius: .25em; background: rgba(255, 255, 255, .25); }\n#mbptv-osd .mbo-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: .25em; background: #e7bd68; }\n#mbptv-osd .mbo-knob { position: absolute; top: 50%; width: 1.1em; height: 1.1em; margin: -.55em 0 0 -.55em; border-radius: 50%; background: #fff; box-shadow: 0 0 .6em rgba(0, 0, 0, .6); }\n#mbptv-osd .mbo-time { margin-left: 1.5em; font-size: 1.375em; font-weight: 600; white-space: nowrap; }\n#mbptv-osd .mbo-hints { margin-top: 1.1em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .72); white-space: nowrap; }\n#mbptv-osd .mbo-hint { display: inline-block; margin-right: 2.2em; }\n#mbptv-osd .mbo-key { display: inline-block; padding: .1em .5em; margin-right: .5em; border-radius: .3em; background: rgba(255, 255, 255, .16); color: #f5f5f7; font-weight: 700; }\n#mbptv-osd .mbo-key.mbo-key--blue { width: 1em; height: 1em; padding: 0; border-radius: 50%; background: #2f6fe4; vertical-align: -.1em; }\n#mbptv-osd .mbo-seek { position: absolute; left: 50%; bottom: 7em; width: 5.4em; margin-left: -2.7em; padding: .3em 0; border-radius: 1em; background: rgba(0, 0, 0, .6); text-align: center; font-size: 1.75em; font-weight: 700; opacity: 0; -webkit-transition: opacity .2s; transition: opacity .2s; }\n#mbptv-osd .mbo-seek.is-on { opacity: 1; }\n\n/* ---------- Website mode: TV pill and focus ring (top level) ---------- */\n#mbptv-pill {\n  position: fixed; left: 2.5em; bottom: 2.5em; z-index: 2147483001; height: 3.6em; padding: .3em 1.4em .3em .3em; border-radius: 2em;\n  background: rgba(20, 20, 26, .92); color: #f5f5f7; line-height: 1.3; cursor: pointer;\n  box-shadow: 0 .8em 2em rgba(0, 0, 0, .5);\n  display: none;\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s; transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s;\n}\n#mbptv-pill.is-visible { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }\n#mbptv-pill div, #mbptv-pill span { margin: 0; padding: 0; border: 0; -webkit-box-sizing: border-box; box-sizing: border-box; font-family: inherit; font-size: 100%; }\n#mbptv-pill .mb-mono { width: 3em; height: 3em; border-radius: 50%; }\n#mbptv-pill .mb-mono-m { font-size: 1.6em; line-height: 1.875em; }\n#mbptv-pill .mbp-key { display: inline-block; width: 1em; height: 1em; border-radius: 50%; background: #2f6fe4; margin: 0 0 0 .9em; vertical-align: -.1em; }\n#mbptv-pill .mbp-label { margin-left: .6em; font-size: 1.25em; font-weight: 700; color: #f5f5f7; }\n#mbptv-pill.is-focused { background: #f5f5f7; -webkit-transform: scale(1.06); transform: scale(1.06); }\n#mbptv-pill.is-focused .mbp-label { color: #07070a; }\n#mbptv-ring {\n  position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 2147483000; pointer-events: none; display: none;\n  border-radius: .6em; box-shadow: 0 0 0 .25em #fff, 0 0 0 .55em rgba(0, 0, 0, .55), 0 0 2em .6em rgba(0, 0, 0, .4);\n  -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1), width .15s, height .15s; transition: transform .15s cubic-bezier(.2, .8, .2, 1), width .15s, height .15s;\n}\n#mbptv-ring.is-visible { display: block; }\n\n/* The site's own source sidebar stays in the DOM (we click its rows) but is never shown while our sheet is open. */\nhtml.mbptv-sources .sidebarbg2 { opacity: .01 !important; }\n#mbptv-osd .mbo-kico { width: 1em; height: 1em; vertical-align: -.14em; }\n#mbptv.is-hidden .mb-toast { bottom: auto; top: 3.5em; }\n\n/* ---------- Page-level state (classes on <html>, set per mode by App.setModeClass, removed by Boot.teardown) ---------- */\n/* The page behind the shell or the player never scrolls, and its scrollbar never shows at the right edge. */\nhtml.mbptv-lock, html.mbptv-lock body { overflow: hidden !important; }\nhtml.mbptv-lock::-webkit-scrollbar, html.mbptv-lock body::-webkit-scrollbar { width: 0; height: 0; display: none; }\n/* Quiet page (Site.live.quiet: Home, lists and search under the shell, never a title page): the website is not painted\n   under the app. visibility keeps its layout, so its own scripts behave the same. */\nhtml.mbptv-quiet body > :not([id^=\"mbptv\"]) { visibility: hidden !important; }\n/* Player mode: the website player's own controls never show under our OSD. Captions stay, and so do JW Player's\n   buffering and error displays. */\nhtml.mbptv-player .jwplayer:not(.jw-state-buffering):not(.jw-state-error) .jw-display, html.mbptv-player .jwplayer:not(.jw-state-error) .jw-title,\nhtml.mbptv-player .jw-controlbar, html.mbptv-player .jw-controls-backdrop, html.mbptv-player .jw-dock, html.mbptv-player .jw-logo,\nhtml.mbptv-player .jw-nextup-container, html.mbptv-player .jw-settings-menu, html.mbptv-player .jw-tooltip, html.mbptv-player .jw-rightclick,\nhtml.mbptv-player .video-js .vjs-control-bar, html.mbptv-player .video-js .vjs-big-play-button { display: none !important; }\n/* Player controls mode (Blue in the player): the website player's controls stay visible for the focus ring. */\nhtml.mbptv-jwctl .jwplayer .jw-controls, html.mbptv-jwctl .jwplayer .jw-controlbar, html.mbptv-jwctl .video-js .vjs-control-bar { visibility: visible !important; opacity: 1 !important; }\n\n/* ---------- TV performance mode (#mbptv.mb-perf; Prefs performance, see Kit.perf) ----------\n   What costs a TV GPU most goes: blurred shadows (focus keeps its white ring, drawn without blur), opacity fades on\n   full-screen layers (art and dims swap at once), width animations (they re-lay the page out every frame) and endless\n   animations (the caret, the skeleton shimmer). Focus scales a little less; transforms still animate. These rules\n   come last so they win over the rules they calm. */\n#mbptv.mb-perf .mb-card-art { -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1); transition: transform .15s cubic-bezier(.2, .8, .2, 1); }\n#mbptv.mb-perf .mb-card.is-focused .mb-card-art { -webkit-transform: scale(1.05); transform: scale(1.05); box-shadow: 0 0 0 .22em #fff; }\n#mbptv.mb-perf .mb-btn, #mbptv.mb-perf .mb-chip, #mbptv.mb-perf .mb-key, #mbptv.mb-perf .mb-person {\n  -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1); transition: transform .15s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv.mb-perf .mb-btn.is-focused, #mbptv.mb-perf .mb-chip.is-focused { -webkit-transform: scale(1.04); transform: scale(1.04); box-shadow: none; }\n#mbptv.mb-perf .mb-key.is-focused { -webkit-transform: scale(1.05); transform: scale(1.05); box-shadow: none; }\n#mbptv.mb-perf .mb-key--go.is-focused { -webkit-transform: scale(1.02); transform: scale(1.02); }\n#mbptv.mb-perf .mb-mono, #mbptv.mb-perf .mb-detail-poster, #mbptv.mb-perf .mb-sheet, #mbptv.mb-perf .mb-dialog, #mbptv.mb-perf .mb-toast { box-shadow: none; }\n#mbptv.mb-perf .mb-screen.is-current, #mbptv.mb-perf .mb-layer-dim, #mbptv.mb-perf .mb-dialog, #mbptv.mb-perf .mb-starting { -webkit-animation: none; animation: none; }\n#mbptv.mb-perf .mb-img, #mbptv.mb-perf .mb-art-img, #mbptv.mb-perf .mb-art-poster, #mbptv.mb-perf .mb-row, #mbptv.mb-perf .mb-dim,\n#mbptv.mb-perf .mb-detail-top, #mbptv.mb-perf .mb-detail-mini, #mbptv.mb-perf .mb-rail, #mbptv.mb-perf .mb-rail-bg,\n#mbptv.mb-perf .mb-rail-label, #mbptv.mb-perf .mb-rail-brand, #mbptv.mb-perf .mb-keyboard,\n#mbptv.mb-perf .mb-ep-play, #mbptv.mb-perf .mb-toggle { -webkit-transition: none; transition: none; }\n#mbptv.mb-perf .mb-rail-item, #mbptv.mb-perf .mb-srow, #mbptv.mb-perf .mb-lrow, #mbptv.mb-perf .mb-source { -webkit-transition: -webkit-transform .12s; transition: transform .12s; }\n#mbptv.mb-perf .mb-hero-text { -webkit-transition: opacity .1s linear, -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: opacity .1s linear, transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv.mb-perf .mb-caret, #mbptv.mb-perf .mb-skel:after { -webkit-animation: none; animation: none; }\n#mbptv.mb-perf .mb-skel:after { display: none; }\n#mbptv.mb-perf #mbptv-player .mbp-art, #mbptv.mb-perf #mbptv-player .mbp-art-img, #mbptv.mb-perf #mbptv-player .mbp-dim,\n#mbptv.mb-perf #mbptv-player .mbp-osd, #mbptv.mb-perf #mbptv-player .mbp-un-scrim { -webkit-transition: none; transition: none; }\n#mbptv.mb-perf #mbptv-player[data-state=\"playing\"] .mbp-art, #mbptv.mb-perf #mbptv-player.is-osd .mbp-osd,\n#mbptv.mb-perf #mbptv-player.is-upnext .mbp-un-scrim { -webkit-transition: none; transition: none; }\n#mbptv.mb-perf #mbptv-player .mbp-skip.is-focused { box-shadow: none; }\n\n/* Native player (src/55-player.js), mounted inside #mbptv and scoped under #mbptv-player. Same tokens and em scale\n   as shell.css (1em = 18px at 1920x1080): bg #07070a, elevated #131318, elevated-2 #1c1c23, text #f5f5f7,\n   text-2 rgba(245,245,247,.72), text-3 rgba(245,245,247,.46), gold #e7bd68, success #35c46a.\n   Chromium 47 safe: prefixed flexbox, margins, prefixed transforms. Only opacity and transform animate, and large\n   layers carry no box-shadow (the TV compositor pays for every blurred pixel). */\n\n#mbptv-player {\n  position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 50; overflow: hidden;\n  background: #000; color: #f5f5f7; outline: none; cursor: default;\n  pointer-events: auto; /* #mbptv is pointer-transparent outside shell mode: never let a pointer reach the site */\n  font-family: \"SamsungOne\", \"Samsung Sans\", \"TizenSans\", \"LG Smart UI\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  font-size: 0.9375vw; line-height: 1.3; font-weight: 400; font-style: normal; text-align: left; direction: ltr;\n  letter-spacing: 0; text-transform: none; -webkit-font-smoothing: antialiased;\n  -webkit-user-select: none; user-select: none; -webkit-box-sizing: border-box; box-sizing: border-box;\n}\n#mbptv-player div, #mbptv-player span, #mbptv-player img, #mbptv-player svg, #mbptv-player video {\n  -webkit-box-sizing: border-box; box-sizing: border-box; margin: 0; padding: 0; border: 0; outline: none; float: none;\n  max-width: none; font-family: inherit; line-height: inherit; letter-spacing: inherit; color: inherit; text-decoration: none;\n}\n#mbptv-player div, #mbptv-player span { font-size: 100%; font-weight: inherit; }\n#mbptv-player img { display: block; }\n#mbptv-player .mbp-ico { display: inline-block; width: 1.5em; height: 1.5em; line-height: 0; vertical-align: middle; -webkit-flex-shrink: 0; flex-shrink: 0; }\n#mbptv-player .mbp-ico svg { display: block; width: 100%; height: 100%; }\n\n@-webkit-keyframes mbpSpin { from { -webkit-transform: rotate(0deg); } to { -webkit-transform: rotate(360deg); } }\n@keyframes mbpSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }\n@-webkit-keyframes mbpFlash {\n  0% { opacity: 0; -webkit-transform: scale(.82); } 22% { opacity: 1; -webkit-transform: scale(1); } 100% { opacity: 0; -webkit-transform: scale(1.22); }\n}\n@keyframes mbpFlash {\n  0% { opacity: 0; transform: scale(.82); } 22% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.22); }\n}\n@-webkit-keyframes mbpFade { from { opacity: 0; } to { opacity: 1; } }\n@keyframes mbpFade { from { opacity: 0; } to { opacity: 1; } }\n@-webkit-keyframes mbpPop { from { opacity: 0; -webkit-transform: translate3d(0, -46%, 0) scale(.96); } to { opacity: 1; -webkit-transform: translate3d(0, -50%, 0) scale(1); } }\n@keyframes mbpPop { from { opacity: 0; transform: translate3d(0, -46%, 0) scale(.96); } to { opacity: 1; transform: translate3d(0, -50%, 0) scale(1); } }\n\n/* ---------- Video and artwork ---------- */\n#mbptv-player .mbp-video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; object-fit: contain; background: #000; }\n#mbptv-player .mbp-art {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 1; background: #000;\n  -webkit-transition: opacity .45s ease-out; transition: opacity .45s ease-out;\n}\n#mbptv-player .mbp-art-img {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; opacity: 0;\n  -webkit-transition: opacity .6s ease-out; transition: opacity .6s ease-out;\n}\n#mbptv-player .mbp-art-img.is-loaded { opacity: .35; }\n#mbptv-player .mbp-art-scrim {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .92) 0%, rgba(0, 0, 0, .55) 38%, rgba(0, 0, 0, .15) 70%, rgba(0, 0, 0, .35) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .92) 0%, rgba(0, 0, 0, .55) 38%, rgba(0, 0, 0, .15) 70%, rgba(0, 0, 0, .35) 100%);\n}\n#mbptv-player[data-state=\"playing\"] .mbp-art { opacity: 0; visibility: hidden; -webkit-transition: opacity .45s ease-out, visibility 0s linear .45s; transition: opacity .45s ease-out, visibility 0s linear .45s; }\n\n/* ---------- Type shared by every panel ---------- */\n#mbptv-player .mbp-kicker {\n  font-size: 1.0625em; line-height: 1.3; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #e7bd68;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n#mbptv-player .mbp-sub-code { color: #f5f5f7; font-weight: 700; margin-right: .55em; }\n#mbptv-player .mbp-sub-text { color: rgba(245, 245, 247, .72); }\n#mbptv-player .mbp-key {\n  display: inline-block; padding: .12em .55em; margin-right: .55em; border-radius: .35em; line-height: 1.35;\n  background: rgba(255, 255, 255, .16); color: #f5f5f7; font-weight: 700; font-size: .9em; letter-spacing: .02em;\n}\n\n/* ---------- Loading ---------- */\n#mbptv-player .mbp-loading {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 5; opacity: 0; visibility: hidden;\n  -webkit-transition: opacity .3s ease-out, visibility 0s linear .3s; transition: opacity .3s ease-out, visibility 0s linear .3s;\n}\n#mbptv-player[data-state=\"loading\"] .mbp-loading { opacity: 1; visibility: visible; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-player .mbp-spin { position: absolute; left: 50%; top: 42%; width: 5em; height: 5em; margin: -2.5em 0 0 -2.5em; }\n#mbptv-player .mbp-spin-ring {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 50%;\n  border: .3em solid rgba(255, 255, 255, .14); border-top-color: #e7bd68;\n  -webkit-animation: mbpSpin .9s linear infinite; animation: mbpSpin .9s linear infinite;\n}\n#mbptv-player .mbp-load-info { position: absolute; left: 7em; right: 30em; bottom: 6em; }\n#mbptv-player .mbp-load-info .mbp-kicker { margin-bottom: 1em; }\n#mbptv-player .mbp-load-title {\n  font-size: 4.5em; line-height: 1.04; font-weight: 800; letter-spacing: -.015em; color: #f5f5f7;\n  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-height: 2.12em;\n}\n#mbptv-player .mbp-load-sub { margin-top: .45em; font-size: 1.75em; line-height: 1.3; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-load-status { margin-top: 1.5em; font-size: 1.25em; line-height: 1.4em; font-weight: 500; color: rgba(245, 245, 247, .46); height: 1.4em; }\n#mbptv-player .mbp-load-hint { position: absolute; right: 7em; bottom: 6em; height: 1.75em; line-height: 1.75em; color: rgba(245, 245, 247, .56); white-space: nowrap; }\n#mbptv-player .mbp-load-hint span { font-size: 1.25em; font-weight: 500; }\n#mbptv-player .mbp-load-hint .mbp-key { font-size: 1.125em; font-weight: 700; }\n\n/* Buffering after playback started: a quiet spinner over the picture. */\n#mbptv-player .mbp-buffer { position: absolute; left: 50%; top: 50%; width: 4.5em; height: 4.5em; margin: -2.25em 0 0 -2.25em; z-index: 7; opacity: 0; visibility: hidden; -webkit-transition: opacity .2s, visibility 0s linear .2s; transition: opacity .2s, visibility 0s linear .2s; }\n#mbptv-player.is-buffering .mbp-buffer { opacity: 1; visibility: visible; -webkit-transition: opacity .3s ease-out .35s; transition: opacity .3s ease-out .35s; }\n\n/* ---------- Play/pause flash ---------- */\n#mbptv-player .mbp-flash {\n  position: absolute; left: 50%; top: 50%; width: 8em; height: 8em; margin: -4em 0 0 -4em; z-index: 8; border-radius: 50%;\n  background: rgba(0, 0, 0, .5); color: #f5f5f7; opacity: 0; pointer-events: none;\n}\n#mbptv-player .mbp-flash .mbp-ico { position: absolute; left: 2.5em; top: 2.5em; width: 3em; height: 3em; }\n#mbptv-player .mbp-flash .mbp-flash-play { display: none; }\n#mbptv-player .mbp-flash.is-play .mbp-flash-play { display: block; }\n#mbptv-player .mbp-flash.is-play .mbp-flash-pause { display: none; }\n#mbptv-player .mbp-flash.is-on { -webkit-animation: mbpFlash .7s ease-out both; animation: mbpFlash .7s ease-out both; }\n\n/* Paused: the picture dims a little behind the controls. */\n#mbptv-player .mbp-dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 9; background: #000; opacity: 0; pointer-events: none; -webkit-transition: opacity .3s ease-out; transition: opacity .3s ease-out; }\n#mbptv-player.is-paused.is-osd .mbp-dim, #mbptv-player.is-still .mbp-dim { opacity: .3; }\n\n/* ---------- Subtitles (our own overlay, docs/PLAYER.md \"Subtitles\") ----------\n   Centred near the bottom safe area, white with a black outline built from text-shadows (repainted only when the\n   cue changes), lifted above the controls while the OSD shows. dir=\"auto\" per line plus plaintext bidi keeps Arabic\n   and Hebrew right-to-left. Sizes: Settings > Subtitle size (data-subsize). */\n#mbptv-player .mbp-subs {\n  position: absolute; left: 10em; right: 10em; bottom: 5em; z-index: 9; text-align: center; pointer-events: none; visibility: hidden;\n  -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0);\n  -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player[data-state=\"playing\"] .mbp-subs.is-on { visibility: visible; }\n#mbptv-player.is-osd .mbp-subs { -webkit-transform: translate3d(0, -18.5em, 0); transform: translate3d(0, -18.5em, 0); }\n#mbptv-player.is-upnext .mbp-subs { -webkit-transform: translate3d(0, -17em, 0); transform: translate3d(0, -17em, 0); }\n#mbptv-player .mbp-subs-box {\n  display: inline-block; max-width: 100%; font-size: 2.75em; line-height: 1.25; font-weight: 600; color: #fff; text-align: center;\n  font-family: \"SamsungOne\", \"Samsung Sans\", \"TizenSans\", \"LG Smart UI\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  text-shadow: 0 0 .09em #000, 0 0 .09em #000, 0 0 .16em #000, .04em .05em .08em #000;\n}\n#mbptv-player[data-subsize=\"small\"] .mbp-subs-box { font-size: 2.25em; }\n#mbptv-player[data-subsize=\"large\"] .mbp-subs-box { font-size: 3.375em; }\n#mbptv-player .mbp-subs-line { display: block; unicode-bidi: -webkit-plaintext; unicode-bidi: plaintext; white-space: normal; word-wrap: break-word; }\n#mbptv-player .mbp-subs-i { font-style: italic; }\n#mbptv-player .mbp-subs-b { font-weight: 800; }\n#mbptv-player .mbp-subs-u { text-decoration: underline; }\n\n/* ---------- OSD ---------- */\n#mbptv-player .mbp-osd {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 10; opacity: 0; visibility: hidden; pointer-events: none;\n  -webkit-transition: opacity .3s ease-out, visibility 0s linear .3s; transition: opacity .3s ease-out, visibility 0s linear .3s;\n}\n#mbptv-player.is-osd .mbp-osd { opacity: 1; visibility: visible; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-player .mbp-osd-top {\n  position: absolute; left: 0; top: 0; width: 100%; height: 12em;\n  background: -webkit-linear-gradient(top, rgba(0, 0, 0, .55) 0%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to bottom, rgba(0, 0, 0, .55) 0%, rgba(0, 0, 0, 0) 100%);\n}\n#mbptv-player .mbp-osd-shade {\n  position: absolute; left: 0; bottom: 0; width: 100%; height: 34em;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .94) 0%, rgba(0, 0, 0, .78) 30%, rgba(0, 0, 0, .4) 64%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .94) 0%, rgba(0, 0, 0, .78) 30%, rgba(0, 0, 0, .4) 64%, rgba(0, 0, 0, 0) 100%);\n}\n#mbptv-player .mbp-osd-main {\n  position: absolute; left: 7em; right: 7em; bottom: 4em;\n  -webkit-transform: translate3d(0, 1.25em, 0); transform: translate3d(0, 1.25em, 0);\n  -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-osd .mbp-osd-main { -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0); }\n#mbptv-player .mbp-head { margin-bottom: 2em; max-width: 90em; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-player.is-seeking .mbp-head { opacity: .3; }\n#mbptv-player .mbp-osd-kicker { height: 1.3em; margin-bottom: .55em; opacity: 0; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-player.is-paused .mbp-osd-kicker { opacity: 1; }\n#mbptv-player .mbp-title { font-size: 3.25em; line-height: 1.12; font-weight: 800; letter-spacing: -.015em; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-subrow { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-top: .55em; height: 2em; }\n#mbptv-player .mbp-sub { -webkit-flex-shrink: 1; flex-shrink: 1; min-width: 0; font-size: 1.5em; line-height: 1.3; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-sub.is-empty { display: none; }\n#mbptv-player .mbp-badges { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-flex-shrink: 0; flex-shrink: 0; white-space: nowrap; }\n#mbptv-player .mbp-sub + .mbp-badges { margin-left: 1.1em; }\n#mbptv-player .mbp-tag {\n  display: inline-block; height: 1.75em; line-height: 1.75em; padding: 0 .6em; margin-right: .6em; border-radius: .35em;\n  font-size: 1.0625em; font-weight: 700; letter-spacing: .04em; background: rgba(255, 255, 255, .16); color: #f5f5f7;\n}\n#mbptv-player .mbp-tag--line { background: transparent; box-shadow: inset 0 0 0 .09em rgba(245, 245, 247, .55); color: rgba(245, 245, 247, .9); }\n\n/* Scrubber: played (gold), buffered, remaining track; the knob and bubble ride a full-width wrapper moved by transform. */\n#mbptv-player .mbp-scrub { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 3em; }\n#mbptv-player .mbp-state { position: relative; width: 2.1em; height: 2.1em; margin-right: 1.25em; color: #f5f5f7; }\n#mbptv-player .mbp-state .mbp-ico { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv-player .mbp-state .mbp-state-play { display: none; }\n#mbptv-player.is-paused .mbp-state .mbp-state-play { display: block; }\n#mbptv-player.is-paused .mbp-state .mbp-state-pause { display: none; }\n#mbptv-player .mbp-time { font-size: 1.375em; font-weight: 600; white-space: nowrap; letter-spacing: .01em; min-width: 3.1em; }\n#mbptv-player.is-long .mbp-time { min-width: 4.2em; }\n#mbptv-player .mbp-elapsed { margin-right: .9em; color: #f5f5f7; }\n#mbptv-player .mbp-remain { margin-left: .9em; text-align: right; color: rgba(245, 245, 247, .72); }\n#mbptv-player .mbp-bar {\n  position: relative; -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: .5em;\n  -webkit-transform: scaleY(.7); transform: scaleY(.7);\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-scrub .mbp-bar { -webkit-transform: scaleY(1); transform: scaleY(1); }\n#mbptv-player .mbp-bar-clip { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: .25em; overflow: hidden; background: rgba(255, 255, 255, .22); }\n#mbptv-player .mbp-buf, #mbptv-player .mbp-fill {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  -webkit-transform-origin: 0 50%; transform-origin: 0 50%; -webkit-transform: scaleX(0); transform: scaleX(0);\n}\n#mbptv-player .mbp-buf { background: rgba(255, 255, 255, .3); }\n#mbptv-player .mbp-fill { background: #e7bd68; }\n#mbptv-player .mbp-headwrap { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv-player .mbp-knob {\n  position: absolute; left: -.9em; top: 50%; width: 1.8em; height: 1.8em; margin-top: -.9em; border-radius: 50%; background: #fff;\n  opacity: 0; -webkit-transform: scale(.4); transform: scale(.4);\n  -webkit-transition: opacity .15s ease-out, -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: opacity .15s ease-out, transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-scrub .mbp-knob { opacity: 1; -webkit-transform: scale(.78); transform: scale(.78); }\n#mbptv-player.is-seeking .mbp-knob { opacity: 1; -webkit-transform: scale(1); transform: scale(1); }\n#mbptv-player .mbp-bubble {\n  position: absolute; left: 0; bottom: 2.4em; text-align: center; white-space: nowrap; opacity: 0;\n  -webkit-transform: translate3d(-50%, .5em, 0); transform: translate3d(-50%, .5em, 0);\n  -webkit-transition: opacity .15s ease-out, -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: opacity .15s ease-out, transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-seeking .mbp-bubble { opacity: 1; -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0); }\n#mbptv-player .mbp-bubble-delta { display: inline-block; margin-bottom: .4em; font-size: 1.375em; font-weight: 800; letter-spacing: .01em; color: #e7bd68; }\n#mbptv-player .mbp-bubble-time {\n  display: block; padding: .3em .75em; border-radius: .45em; background: #f5f5f7; color: #07070a;\n  font-size: 1.75em; line-height: 1.2; font-weight: 800; letter-spacing: .01em;\n}\n\n/* Buttons row: pills that turn solid white when focused (the shell's button language). */\n#mbptv-player .mbp-btns { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 4.5em; margin-top: 1.4em; }\n#mbptv-player .mbp-btn {\n  position: relative; overflow: hidden;\n  display: -webkit-inline-box; display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center;\n  height: 3.5em; padding: 0 1.6em 0 1.3em; margin-right: 1em; border-radius: 2em; white-space: nowrap;\n  background: rgba(255, 255, 255, .12); color: rgba(245, 245, 247, .9);\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-btn .mbp-ico { position: relative; width: 1.45em; height: 1.45em; margin-right: .6em; }\n#mbptv-player .mbp-btn-label { position: relative; font-size: 1.3125em; font-weight: 600; line-height: 1; letter-spacing: .005em; }\n#mbptv-player .mbp-btn-value { position: relative; margin-left: .5em; font-size: 1.3125em; font-weight: 500; line-height: 1; opacity: .62; }\n#mbptv-player .mbp-btn.is-focused { background: #f5f5f7; color: #07070a; -webkit-transform: scale(1.06); transform: scale(1.06); }\n#mbptv-player.is-scrub .mbp-btns .mbp-btn { background: rgba(255, 255, 255, .09); color: rgba(245, 245, 247, .66); }\n\n/* ---------- Skip Intro (floating, focused while the controls are hidden) ---------- */\n#mbptv-player .mbp-skip {\n  position: absolute; right: 7em; bottom: 6.5em; z-index: 11;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;\n  height: 3.75em; padding: 0 1.9em 0 1.5em; border-radius: 2em; background: rgba(20, 20, 26, .82); color: #f5f5f7;\n  opacity: 0; visibility: hidden; -webkit-transform: translate3d(0, 1em, 0); transform: translate3d(0, 1em, 0);\n  -webkit-transition: opacity .25s ease-out, -webkit-transform .25s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .25s;\n  transition: opacity .25s ease-out, transform .25s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .25s;\n}\n#mbptv-player .mbp-skip.is-on {\n  opacity: 1; visibility: visible; -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0);\n  -webkit-transition: opacity .25s ease-out, -webkit-transform .25s cubic-bezier(.2, .8, .2, 1); transition: opacity .25s ease-out, transform .25s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-skip.is-focused { background: #f5f5f7; color: #07070a; box-shadow: 0 .8em 2em rgba(0, 0, 0, .45); }\n#mbptv-player .mbp-skip .mbp-ico { width: 1.5em; height: 1.5em; margin-right: .65em; }\n#mbptv-player .mbp-skip-label { font-size: 1.375em; font-weight: 700; line-height: 1; }\n\n/* ---------- Chip (resume notice, quality switched, hints) ---------- */\n#mbptv-player .mbp-chip {\n  position: absolute; left: 50%; top: 2.55em; z-index: 12; max-width: 58em; padding: .75em 1.45em; border-radius: 2em;\n  background: rgba(28, 28, 35, .94); color: #f5f5f7; font-size: 1.375em; font-weight: 600; line-height: 1.3;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  opacity: 0; visibility: hidden; -webkit-transform: translate3d(-50%, -.8em, 0); transform: translate3d(-50%, -.8em, 0);\n  -webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out, visibility 0s linear .2s;\n  transition: opacity .2s ease-out, transform .2s ease-out, visibility 0s linear .2s;\n}\n#mbptv-player .mbp-chip.is-on {\n  opacity: 1; visibility: visible; -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0);\n  -webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out; transition: opacity .2s ease-out, transform .2s ease-out;\n}\n\n/* ---------- Up Next ---------- */\n#mbptv-player .mbp-un-scrim {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 12; opacity: 0; visibility: hidden; pointer-events: none;\n  background: -webkit-radial-gradient(100% 100%, ellipse farthest-corner, rgba(0, 0, 0, .82) 0%, rgba(0, 0, 0, .5) 30%, rgba(0, 0, 0, 0) 62%);\n  background: radial-gradient(ellipse farthest-corner at 100% 100%, rgba(0, 0, 0, .82) 0%, rgba(0, 0, 0, .5) 30%, rgba(0, 0, 0, 0) 62%);\n  -webkit-transition: opacity .35s ease-out, visibility 0s linear .35s; transition: opacity .35s ease-out, visibility 0s linear .35s;\n}\n#mbptv-player.is-upnext .mbp-un-scrim { opacity: 1; visibility: visible; -webkit-transition: opacity .35s ease-out; transition: opacity .35s ease-out; }\n#mbptv-player .mbp-upnext {\n  position: absolute; right: 7em; bottom: 5.5em; z-index: 13; width: 48em; padding: 1.25em; border-radius: 1.1em;\n  background: rgba(28, 28, 35, .97); opacity: 0; visibility: hidden;\n  -webkit-transform: translate3d(0, 1.5em, 0); transform: translate3d(0, 1.5em, 0);\n  -webkit-transition: opacity .3s ease-out, -webkit-transform .35s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .35s;\n  transition: opacity .3s ease-out, transform .35s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .35s;\n}\n#mbptv-player.is-upnext .mbp-upnext {\n  opacity: 1; visibility: visible; -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0);\n  -webkit-transition: opacity .3s ease-out, -webkit-transform .35s cubic-bezier(.2, .8, .2, 1); transition: opacity .3s ease-out, transform .35s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-un-top { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }\n#mbptv-player .mbp-un-still {\n  position: relative; width: 20em; height: 11.25em; border-radius: .65em; overflow: hidden; -webkit-flex-shrink: 0; flex-shrink: 0;\n  background: #131318;\n  background: -webkit-linear-gradient(top, #1d1d25 0%, #131318 100%);\n  background: linear-gradient(to bottom, #1d1d25 0%, #131318 100%);\n}\n#mbptv-player .mbp-un-ph { position: absolute; left: 0; top: 0; width: 100%; height: 100%; text-align: center; font-size: 2.5em; line-height: 4.5em; font-weight: 800; color: rgba(245, 245, 247, .3); }\n#mbptv-player .mbp-un-img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out; }\n#mbptv-player .mbp-un-img.is-loaded { opacity: 1; }\n#mbptv-player .mbp-un-glyph {\n  position: absolute; left: 50%; top: 50%; width: 3.6em; height: 3.6em; margin: -1.8em 0 0 -1.8em; border-radius: 50%;\n  background: rgba(7, 7, 10, .55); color: #f5f5f7;\n}\n#mbptv-player .mbp-un-glyph .mbp-ico { position: absolute; left: 1.05em; top: .9em; width: 1.8em; height: 1.8em; }\n#mbptv-player .mbp-un-text { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 0; margin-left: 1.5em; padding-top: .2em; }\n#mbptv-player .mbp-un-count { margin-bottom: .4em; font-size: 1.25em; letter-spacing: .1em; }\n#mbptv-player .mbp-un-title { font-size: 1.75em; line-height: 1.2; font-weight: 700; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-un-meta { margin-top: .3em; font-size: 1.1875em; font-weight: 600; letter-spacing: .02em; color: rgba(245, 245, 247, .56); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-un-btns { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-top: 1.05em; }\n#mbptv-player .mbp-un-btns .mbp-btn { height: 3.25em; margin-right: .8em; }\n#mbptv-player .mbp-btn-fill {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, .16);\n  -webkit-transform-origin: 0 50%; transform-origin: 0 50%; -webkit-transform: scaleX(0); transform: scaleX(0);\n}\n#mbptv-player .mbp-btn-fill.is-running { -webkit-transition: -webkit-transform 1s linear; transition: transform 1s linear; }\n#mbptv-player .mbp-btn.is-focused .mbp-btn-fill { background: rgba(231, 189, 104, .55); }\n\n/* ---------- Quality sheet ---------- */\n#mbptv-player .mbp-sheet-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 20; visibility: hidden; -webkit-transition: visibility 0s linear .3s; transition: visibility 0s linear .3s; }\n#mbptv-player.is-sheet .mbp-sheet-layer { visibility: visible; -webkit-transition: none; transition: none; }\n#mbptv-player .mbp-sheet-dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, .6); opacity: 0; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out; }\n#mbptv-player.is-sheet .mbp-sheet-dim { opacity: 1; }\n#mbptv-player .mbp-sheet {\n  position: absolute; right: 0; top: 0; bottom: 0; width: 42em; padding: 4.5em 3.5em 3em; background: #131318;\n  -webkit-transform: translate3d(100%, 0, 0); transform: translate3d(100%, 0, 0);\n  -webkit-transition: -webkit-transform .28s cubic-bezier(.2, .8, .2, 1); transition: transform .28s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-sheet .mbp-sheet { -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0); }\n#mbptv-player .mbp-sheet .mbp-kicker { margin-bottom: .6em; }\n#mbptv-player .mbp-sheet-title { font-size: 2.25em; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; color: #f5f5f7; margin-bottom: .35em; }\n#mbptv-player .mbp-sheet-sub { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .46); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-sheet-port { position: absolute; left: 2.5em; right: 2.5em; top: 13.25em; bottom: 6.5em; overflow: hidden; }\n#mbptv-player .mbp-sheet-list { padding: .75em 1em; -webkit-transition: -webkit-transform .22s ease-out; transition: transform .22s ease-out; }\n#mbptv-player .mbp-sheet-label { margin: 1.4em 0 .8em .15em; font-size: 1.0625em; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(245, 245, 247, .46); }\n#mbptv-player .mbp-opt {\n  position: relative; min-height: 4.75em; margin-bottom: .6em; padding: .95em 4.25em .95em 1.5em; border-radius: .8em;\n  background: rgba(255, 255, 255, .05); color: #f5f5f7;\n  -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1); transition: transform .15s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-opt-label { font-size: 1.5em; line-height: 1.25; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-opt-meta { margin-top: .2em; font-size: 1.125em; line-height: 1.3; font-weight: 500; color: rgba(245, 245, 247, .5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-opt .mbp-opt-check { position: absolute; right: 1.35em; top: 50%; width: 1.75em; height: 1.75em; margin-top: -.875em; color: #35c46a; display: none; }\n#mbptv-player .mbp-opt.is-current .mbp-opt-check { display: block; }\n#mbptv-player .mbp-opt.is-focused { background: #f5f5f7; color: #07070a; -webkit-transform: scale(1.02); transform: scale(1.02); }\n#mbptv-player .mbp-opt.is-focused .mbp-opt-meta { color: rgba(7, 7, 10, .6); }\n#mbptv-player .mbp-opt.is-focused .mbp-opt-check { color: #1f8a46; }\n#mbptv-player .mbp-sheet-hint { position: absolute; left: 3.5em; bottom: 2.6em; font-size: 1.125em; font-weight: 500; color: rgba(245, 245, 247, .5); white-space: nowrap; }\n#mbptv-player .mbp-hint-gap { margin-right: 1.6em; }\n\n/* ---------- Error card ---------- */\n#mbptv-player .mbp-error { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 30; display: none; background: rgba(0, 0, 0, .25); }\n#mbptv-player[data-state=\"error\"] .mbp-error { display: block; -webkit-animation: mbpFade .2s ease-out; animation: mbpFade .2s ease-out; }\n#mbptv-player .mbp-err-card {\n  position: absolute; left: 50%; top: 50%; width: 58em; margin-left: -29em; padding: 3.5em 4em 3.25em; border-radius: 1.25em;\n  background: rgba(28, 28, 35, .97); text-align: center;\n  -webkit-transform: translate3d(0, -50%, 0); transform: translate3d(0, -50%, 0);\n  -webkit-animation: mbpPop .24s cubic-bezier(.2, .8, .2, 1); animation: mbpPop .24s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-err-ico { display: block; width: 4em; height: 4em; margin: 0 auto 1.4em; color: #e7bd68; }\n#mbptv-player .mbp-err-kicker { margin-bottom: .75em; text-align: center; color: rgba(245, 245, 247, .56); }\n#mbptv-player .mbp-err-title { font-size: 2.5em; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; color: #f5f5f7; margin-bottom: .5em; text-align: center; }\n#mbptv-player .mbp-err-body { max-width: 32em; margin: 0 auto 1em; font-size: 1.5em; line-height: 1.45; color: rgba(245, 245, 247, .72); text-align: center; }\n#mbptv-player .mbp-err-code { margin-bottom: 2.3em; font-size: 1.0625em; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgba(245, 245, 247, .56); text-align: center; }\n#mbptv-player .mbp-err-code.is-empty { margin-bottom: 1.3em; }\n#mbptv-player .mbp-err-btns { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-justify-content: center; justify-content: center; -webkit-align-items: center; align-items: center; }\n#mbptv-player .mbp-err-btns .mbp-btn { height: 3.75em; margin: 0 .5em; padding: 0 1.8em 0 1.5em; }\n\n/* Reduce motion (#mbptv.mb-reduce stills every transition and animation): keep the spinners turning. */\n#mbptv.mb-reduce #mbptv-player .mbp-spin-ring { -webkit-animation: mbpSpin 1.2s linear infinite !important; animation: mbpSpin 1.2s linear infinite !important; }\n\n/* Screen additions (0.3.1), built after shell.css (tools/build.cjs) with the same tokens and rules: scoped under\n   #mbptv, em units (1em = 18px at 1080p), Chromium 47 safe (flexbox, margins, prefixed transforms).\n   Detail episodes: the season line, the loading state of a season switch, watched marks, the Continue Watching\n   progress and name-only episode cards. Settings: the list scrolls when it is taller than the screen. */\n\n/* \"Season 2 · 13 episodes · [bar] 2 of 13 watched\", above the episodes and aligned with the first card. */\n#mbptv .mb-season-info {\n  height: 2.2em; margin: 0 5em .55em 9em; white-space: nowrap; overflow: hidden;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;\n}\n#mbptv .mb-season-name { font-size: 1.5em; font-weight: 700; color: #f5f5f7; }\n#mbptv .mb-season-count { margin-left: .9em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-season-watched {\n  margin-left: 1.6em; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;\n}\n#mbptv .mb-season-watched .mb-progress { width: 6.5em; margin-right: .75em; }\n#mbptv .mb-season-watched-text { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .72); }\n\n/* A season that is loading: the previous episodes stay, dimmed, under a spinner. */\n#mbptv .mb-row--episodes .mb-track {\n  -webkit-transition: -webkit-transform .26s cubic-bezier(.2, .8, .2, 1), opacity .2s ease-out;\n  transition: transform .26s cubic-bezier(.2, .8, .2, 1), opacity .2s ease-out;\n}\n#mbptv .mb-row--episodes.is-loading .mb-track { opacity: .3; }\n#mbptv .mb-ep-spinner { position: absolute; left: 50%; top: 5.45em; margin-left: -1.75em; display: none; z-index: 2; }\n#mbptv .mb-row--episodes.is-loading .mb-ep-spinner { display: block; }\n\n/* Watched: a check at the top right of the picture. */\n#mbptv .mb-ep-check {\n  position: absolute; right: .7em; top: .7em; width: 2.1em; height: 2.1em; border-radius: 50%;\n  background: rgba(7, 7, 10, .78); color: #35c46a; display: none;\n}\n#mbptv .mb-ep-check .mb-ico { position: absolute; left: .3em; top: .3em; width: 1.5em; height: 1.5em; }\n#mbptv .mb-episode.is-watched .mb-ep-check { display: block; }\n\n/* The Continue Watching episode: a progress bar along the bottom edge of the picture. */\n#mbptv .mb-ep-progress { position: absolute; left: 0; right: 0; bottom: 0; }\n#mbptv .mb-ep-progress .mb-progress { height: .35em; border-radius: 0; background: rgba(255, 255, 255, .28); }\n#mbptv .mb-ep-progress .mb-progress-fill { border-radius: 0; }\n\n/* An episode the site lists by name only: a deliberate text card (code, title, a large faint number). */\n#mbptv .mb-ep-text {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; padding: 1.15em 1.3em; overflow: hidden; white-space: normal;\n  background: #1a1a21;\n  background: -webkit-linear-gradient(top, #23232b 0%, #15151b 100%);\n  background: linear-gradient(to bottom, #23232b 0%, #15151b 100%);\n}\n#mbptv .mb-ep-text-code { position: relative; font-size: 1.0625em; font-weight: 800; letter-spacing: .06em; color: #e7bd68; white-space: nowrap; }\n#mbptv .mb-ep-text-title {\n  position: relative; margin-top: .5em; max-width: 11.5em; max-height: 3.75em; font-size: 1.5em; line-height: 1.25; font-weight: 700; color: #f5f5f7;\n  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;\n}\n#mbptv .mb-ep-text-num {\n  position: absolute; right: .12em; bottom: -.12em; font-size: 7em; line-height: 1; font-weight: 800; letter-spacing: -.04em;\n  color: rgba(245, 245, 247, .07);\n}\n#mbptv .mb-episode--text.is-focused .mb-ep-text { background: #2a2a33; }\n/* The focused text card's play button sits bottom left, clear of the title. */\n#mbptv .mb-episode--text .mb-ep-play { left: 1.3em; top: auto; bottom: 1.1em; margin: 0; }\n\n/* Performance mode: no fades on the rows. */\n#mbptv.mb-perf .mb-row--episodes .mb-track { -webkit-transition: -webkit-transform .2s cubic-bezier(.2, .8, .2, 1); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }\n\n/* ---------- Settings: a list taller than the screen scrolls (by transform) inside this port ---------- */\n#mbptv .mb-settings-port { position: absolute; left: -1.5em; top: 0; width: 61em; bottom: 2.5em; overflow: hidden; }\n#mbptv .mb-settings-port .mb-list {\n  margin: 0 0 0 1.5em; padding-bottom: 1em;\n  -webkit-transition: -webkit-transform .22s cubic-bezier(.2, .8, .2, 1); transition: transform .22s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv.mb-perf .mb-settings-port .mb-list { -webkit-transition: none; transition: none; }\n";
+  var CSS_TEXT = "/* MovieBox Pro TV shell. Scoped under #mbptv (plus the top-level #mbptv-pill, #mbptv-ring and #mbptv-osd).\n   Reference frame 1920x1080: 1em = 18px. Tokens: bg #07070a, elevated #131318, elevated-2 #1c1c23,\n   hairline rgba(255,255,255,.08), text #f5f5f7, text-2 rgba(245,245,247,.72), text-3 rgba(245,245,247,.6),\n   gold #e7bd68, IMDb #f5c518, fresh #fa320a, success #35c46a. Chromium 47 safe: flexbox, margins, prefixed transforms. */\n\n#mbptv, #mbptv-osd, #mbptv-pill, #mbptv-ring {\n  font-family: \"SamsungOne\", \"Samsung Sans\", \"TizenSans\", \"LG Smart UI\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  font-size: 0.9375vw;\n  -webkit-font-smoothing: antialiased;\n  -webkit-box-sizing: border-box;\n  box-sizing: border-box;\n  text-align: left;\n  direction: ltr;\n  letter-spacing: 0;\n  text-transform: none;\n  font-style: normal;\n}\n#mbptv {\n  position: fixed;\n  left: 0;\n  top: 0;\n  width: 100%;\n  height: 100%;\n  z-index: 2147483000;\n  background: #07070a;\n  color: #f5f5f7;\n  line-height: 1.3;\n  font-weight: 400;\n  overflow: hidden;\n  outline: none;\n  -webkit-user-select: none;\n  user-select: none;\n  cursor: default;\n}\n#mbptv div, #mbptv span, #mbptv img, #mbptv svg {\n  -webkit-box-sizing: border-box;\n  box-sizing: border-box;\n  margin: 0;\n  padding: 0;\n  border: 0;\n  outline: none;\n  float: none;\n  max-width: none;\n  background-image: none;\n  font-family: inherit;\n  line-height: inherit;\n  letter-spacing: inherit;\n  text-decoration: none;\n  color: inherit;\n}\n#mbptv div, #mbptv span { font-size: 100%; font-weight: inherit; }\n#mbptv img { display: block; }\n#mbptv [data-f] { outline: none; cursor: pointer; }\n\n/* Hidden modes (player, website): the root stays for toasts but never covers or blocks the site. */\n#mbptv.is-hidden { background: transparent; pointer-events: none; }\n#mbptv.is-hidden .mb-rail, #mbptv.is-hidden .mb-stage, #mbptv.is-hidden .mb-layer, #mbptv.is-hidden .mb-starting { display: none; }\n\n/* ---------- Icons ---------- */\n#mbptv .mb-ico, #mbptv-osd .mb-ico, #mbptv-pill .mb-ico { display: inline-block; width: 1.5em; height: 1.5em; line-height: 0; vertical-align: middle; }\n#mbptv .mb-ico svg, #mbptv-osd .mb-ico svg, #mbptv-pill .mb-ico svg { display: block; width: 100%; height: 100%; }\n\n/* ---------- Motion ---------- */\n@-webkit-keyframes mbSpin { from { -webkit-transform: rotate(0deg); } to { -webkit-transform: rotate(360deg); } }\n@keyframes mbSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }\n@-webkit-keyframes mbShimmer { from { -webkit-transform: translateX(-100%); } to { -webkit-transform: translateX(100%); } }\n@keyframes mbShimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }\n@-webkit-keyframes mbBlink { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }\n@keyframes mbBlink { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }\n@-webkit-keyframes mbFadeIn { from { opacity: 0; } to { opacity: 1; } }\n@-webkit-keyframes mbScreenIn { from { opacity: .4; } to { opacity: 1; } }\n@keyframes mbScreenIn { from { opacity: .4; } to { opacity: 1; } }\n@keyframes mbFadeIn { from { opacity: 0; } to { opacity: 1; } }\n@-webkit-keyframes mbSlideIn { from { -webkit-transform: translate3d(100%, 0, 0); } to { -webkit-transform: translate3d(0, 0, 0); } }\n@keyframes mbSlideIn { from { transform: translate3d(100%, 0, 0); } to { transform: translate3d(0, 0, 0); } }\n@-webkit-keyframes mbPop { from { opacity: 0; -webkit-transform: scale(.94); } to { opacity: 1; -webkit-transform: scale(1); } }\n@keyframes mbPop { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }\n\n#mbptv.mb-reduce *, #mbptv.mb-reduce *:after, #mbptv-osd.mb-reduce, #mbptv-osd.mb-reduce *, #mbptv-ring.mb-reduce {\n  -webkit-transition: none !important;\n  transition: none !important;\n  -webkit-animation: none !important;\n  animation: none !important;\n}\n#mbptv.mb-reduce .mb-spinner-ring { -webkit-animation: mbSpin 1.2s linear infinite !important; animation: mbSpin 1.2s linear infinite !important; }\n/* TV performance mode (#mbptv.mb-perf) calms the costliest effects: see the end of this file. */\n\n/* ---------- Stage and screens ---------- */\n#mbptv .mb-stage { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv .mb-screen { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden; display: none; background: #07070a; }\n/* The incoming screen fades from 40%, never from black: no frame shows an empty stage between two screens. */\n#mbptv .mb-screen.is-current { display: block; -webkit-animation: mbScreenIn .22s ease-out; animation: mbScreenIn .22s ease-out; }\n\n/* ---------- Rail ---------- */\n#mbptv .mb-rail {\n  position: absolute; left: 0; top: 0; bottom: 0; width: 6.5em; z-index: 20;\n  -webkit-transition: width .2s cubic-bezier(.2, .8, .2, 1); transition: width .2s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv.no-rail .mb-rail { display: none; }\n#mbptv .mb-rail-bg {\n  position: absolute; left: 0; top: 0; bottom: 0; width: 120em; opacity: 0; pointer-events: none;\n  background: -webkit-linear-gradient(left, rgba(7, 7, 10, .98) 0%, rgba(7, 7, 10, .97) 19%, rgba(7, 7, 10, .84) 32%, rgba(7, 7, 10, .76) 100%);\n  background: linear-gradient(to right, rgba(7, 7, 10, .98) 0%, rgba(7, 7, 10, .97) 19%, rgba(7, 7, 10, .84) 32%, rgba(7, 7, 10, .76) 100%);\n  -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out;\n}\n#mbptv.rail-open .mb-rail { width: 19em; }\n#mbptv.rail-open .mb-rail-bg { opacity: 1; }\n#mbptv .mb-rail-head { position: absolute; left: 1.75em; top: 3.5em; height: 3em; white-space: nowrap; }\n#mbptv .mb-rail-brand {\n  position: absolute; left: 3.1em; top: .45em; font-size: 1.375em; font-weight: 700; letter-spacing: .01em; color: #f5f5f7;\n  opacity: 0; -webkit-transition: opacity .18s; transition: opacity .18s;\n}\n#mbptv.rail-open .mb-rail-brand { opacity: 1; }\n#mbptv .mb-rail-items { position: absolute; left: 1em; top: 50%; margin-top: -15.5em; width: 17em; }\n#mbptv .mb-rail-item {\n  position: relative; height: 3.5em; width: 4.5em; margin-bottom: .75em; border-radius: 1.75em; color: rgba(245, 245, 247, .62);\n  white-space: nowrap; overflow: hidden;\n  -webkit-transition: background-color .18s, color .18s, width .2s cubic-bezier(.2, .8, .2, 1); transition: background-color .18s, color .18s, width .2s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-rail-item .mb-ico { position: absolute; left: 1.5em; top: 1em; width: 1.5em; height: 1.5em; }\n#mbptv .mb-rail-label {\n  position: absolute; left: 3.6em; top: 1.05em; font-size: 1.25em; line-height: 1.12em; font-weight: 600; opacity: 0;\n  -webkit-transition: opacity .15s; transition: opacity .15s;\n}\n#mbptv.rail-open .mb-rail-item { width: 15em; }\n#mbptv.rail-open .mb-rail-label { opacity: 1; }\n#mbptv .mb-rail-item.is-active { color: #e7bd68; }\n#mbptv .mb-rail-item.is-focused { background: #f5f5f7; color: #07070a; }\n#mbptv .mb-rail-sep { height: 1.75em; }\n\n/* ---------- Monogram and brand ---------- */\n#mbptv .mb-mono, #mbptv-pill .mb-mono {\n  position: relative; width: 3em; height: 3em; border-radius: .8em; overflow: hidden;\n  background: #e7bd68;\n  background: -webkit-linear-gradient(315deg, #f3d48f 0%, #e7bd68 45%, #b98a35 100%);\n  background: linear-gradient(135deg, #f3d48f 0%, #e7bd68 45%, #b98a35 100%);\n  box-shadow: 0 .4em 1.2em rgba(231, 189, 104, .18);\n}\n#mbptv .mb-mono-m, #mbptv-pill .mb-mono-m {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; text-align: center; color: #1a1408;\n  font-size: 1.9em; line-height: 1.58em; font-weight: 800; letter-spacing: -.02em;\n}\n#mbptv .mb-mono--xl { width: 7em; height: 7em; border-radius: 1.8em; }\n#mbptv .mb-mono--xl .mb-mono-m { font-size: 4.4em; line-height: 1.6em; }\n\n/* ---------- Type ---------- */\n#mbptv .mb-display { font-size: 4.5em; line-height: 1.04; font-weight: 800; letter-spacing: -.015em; color: #f5f5f7; }\n#mbptv .mb-h1 { font-size: 3em; line-height: 1.12; font-weight: 700; letter-spacing: -.01em; color: #f5f5f7; }\n#mbptv .mb-section { font-size: 1.75em; line-height: 1.2; font-weight: 600; color: #f5f5f7; }\n#mbptv .mb-body { font-size: 1.5em; line-height: 1.45; font-weight: 400; color: rgba(245, 245, 247, .72); }\n#mbptv .mb-meta { font-size: 1.25em; line-height: 1.4; font-weight: 500; color: rgba(245, 245, 247, .72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-kicker { font-size: 1.0625em; line-height: 1.3; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #e7bd68; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-clamp2, #mbptv .mb-clamp3, #mbptv .mb-clamp4 { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }\n#mbptv .mb-clamp2 { -webkit-line-clamp: 2; }\n#mbptv .mb-clamp3 { -webkit-line-clamp: 3; }\n#mbptv .mb-clamp4 { -webkit-line-clamp: 4; }\n\n/* ---------- Buttons ---------- */\n#mbptv .mb-btns { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }\n#mbptv .mb-btn {\n  display: -webkit-inline-box; display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center;\n  height: 3.75em; padding: 0 2em; margin-right: 1em; border-radius: 2em; white-space: nowrap;\n  background: rgba(255, 255, 255, .1); color: #f5f5f7;\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s, color .18s, box-shadow .18s;\n  transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s, color .18s, box-shadow .18s;\n}\n#mbptv .mb-btn--primary { background: rgba(245, 245, 247, .3); color: #fff; }\n#mbptv .mb-btn .mb-btn-ico { width: 1.5em; height: 1.5em; margin: 0 .75em 0 -.25em; }\n#mbptv .mb-btn-label { font-size: 1.375em; font-weight: 600; line-height: 1; letter-spacing: .005em; }\n#mbptv .mb-btn.is-focused {\n  background: #f5f5f7; color: #07070a;\n  -webkit-transform: scale(1.06); transform: scale(1.06);\n  box-shadow: 0 .8em 2em rgba(0, 0, 0, .55);\n}\n\n/* ---------- Chips ---------- */\n#mbptv .mb-chiprow { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; }\n#mbptv .mb-chip {\n  display: -webkit-inline-box; display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center;\n  height: 3.25em; padding: 0 1.5em; margin: 0 .875em .875em 0; border-radius: 2em; white-space: nowrap;\n  background: rgba(255, 255, 255, .1); color: rgba(245, 245, 247, .86);\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s, color .18s;\n  transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s, color .18s;\n}\n#mbptv .mb-chip-ico { width: 1.25em; height: 1.25em; margin-right: .6em; opacity: .7; }\n#mbptv .mb-chip-label { font-size: 1.25em; font-weight: 500; line-height: 1; }\n#mbptv .mb-chip.is-selected { background: rgba(231, 189, 104, .16); color: #e7bd68; }\n#mbptv .mb-chip.is-focused { background: #f5f5f7; color: #07070a; -webkit-transform: scale(1.06); transform: scale(1.06); box-shadow: 0 .6em 1.6em rgba(0, 0, 0, .5); }\n#mbptv .mb-chip.is-focused .mb-chip-ico { opacity: 1; }\n\n/* Static info chips (hero / detail). */\n#mbptv .mb-tags { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 2.25em; overflow: hidden; }\n#mbptv .mb-tag {\n  display: inline-block; height: 1.75em; line-height: 1.75em; padding: 0 .6em; margin-right: .75em; border-radius: .35em;\n  font-size: 1.0625em; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;\n  background: rgba(255, 255, 255, .14); color: #f5f5f7;\n}\n#mbptv .mb-tag--imdb { background: #f5c518; color: #000; letter-spacing: .02em; text-transform: none; }\n#mbptv .mb-tag--line { background: transparent; box-shadow: inset 0 0 0 .09em rgba(245, 245, 247, .5); color: rgba(245, 245, 247, .86); }\n#mbptv .mb-tag--gold { background: rgba(231, 189, 104, .18); color: #e7bd68; }\n#mbptv .mb-score { display: -webkit-inline-box; display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center; margin-right: 1.75em; white-space: nowrap; }\n#mbptv .mb-score-dot { width: .9em; height: .9em; border-radius: 50%; margin-right: .5em; background: #fa320a; }\n#mbptv .mb-score-dot--aud { background: #e7bd68; }\n#mbptv .mb-score-val { font-size: 1.375em; font-weight: 700; color: #f5f5f7; }\n#mbptv .mb-score-lbl { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); margin-left: .5em; }\n\n/* ---------- Cards ---------- */\n#mbptv .mb-card { position: relative; -webkit-flex-shrink: 0; flex-shrink: 0; margin-right: 1.5em; }\n#mbptv .mb-card--poster { width: 12em; }\n#mbptv .mb-card--poster .mb-card-art { height: 18em; }\n#mbptv .mb-card--grid { width: 15em; }\n#mbptv .mb-card--grid .mb-card-art { height: 22.5em; }\n#mbptv .mb-card--wide { width: 22em; }\n#mbptv .mb-card--wide .mb-card-art { height: 12.375em; }\n#mbptv .mb-card-art {\n  position: relative; width: 100%; border-radius: .5em; overflow: hidden; background: #131318;\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .18s;\n  transition: transform .18s cubic-bezier(.2, .8, .2, 1), box-shadow .18s;\n}\n#mbptv .mb-card-ph {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;\n  padding: 1em; text-align: center;\n  background: #16161c;\n  background: -webkit-linear-gradient(top, #1d1d25 0%, #131318 100%);\n  background: linear-gradient(to bottom, #1d1d25 0%, #131318 100%);\n}\n#mbptv .mb-card-ph-title { font-size: 1.375em; line-height: 1.25; font-weight: 700; color: rgba(245, 245, 247, .55); text-align: center; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden; }\n#mbptv .mb-img { opacity: 0; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out; }\n#mbptv .mb-img.is-loaded { opacity: 1; }\n#mbptv .mb-img.is-error { display: none; }\n#mbptv .mb-card-img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; }\n#mbptv .mb-card-badge {\n  position: absolute; left: .6em; top: .6em; height: 1.7em; line-height: 1.7em; padding: 0 .5em; border-radius: .3em;\n  font-size: 1.0625em; font-weight: 800; letter-spacing: .06em; color: #07070a; background: rgba(245, 245, 247, .92);\n}\n#mbptv .mb-card-shade {\n  position: absolute; left: 0; right: 0; bottom: 0; height: 5em; padding: 0 .9em .9em;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: flex-end; justify-content: flex-end;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .9) 0%, rgba(0, 0, 0, 0) 100%);\n}\n#mbptv .mb-card-plabel { font-size: 1.0625em; font-weight: 700; letter-spacing: .04em; color: #f5f5f7; margin-bottom: .45em; }\n#mbptv .mb-progress { position: relative; height: .3em; border-radius: .15em; background: rgba(255, 255, 255, .28); overflow: hidden; }\n#mbptv .mb-progress-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: .15em; background: #e7bd68; }\n#mbptv .mb-card-title {\n  margin-top: .9em; font-size: 1.25em; line-height: 1.3; font-weight: 500; color: rgba(245, 245, 247, .62);\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  -webkit-transition: color .18s, -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: color .18s, transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-card-sub { margin-top: .3em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; overflow: hidden; height: 1.4em; }\n#mbptv .mb-card-sub span { display: inline-block; vertical-align: middle; }\n#mbptv .mb-card-star { width: .95em; height: .95em; margin: -.15em .3em 0 .9em; color: #e7bd68; vertical-align: middle; }\n#mbptv .mb-card.is-focused .mb-card-art {\n  -webkit-transform: scale(1.08); transform: scale(1.08);\n  box-shadow: 0 0 0 .22em #fff, 0 1.2em 2.4em rgba(0, 0, 0, .6);\n}\n#mbptv .mb-card.is-focused .mb-card-title { color: #fff; -webkit-transform: translate3d(0, .55em, 0); transform: translate3d(0, .55em, 0); }\n#mbptv .mb-card.is-focused .mb-card-sub { color: rgba(245, 245, 247, .72); -webkit-transform: translate3d(0, .55em, 0); transform: translate3d(0, .55em, 0); }\n#mbptv .mb-card--more .mb-card-art { background: rgba(255, 255, 255, .06); }\n#mbptv .mb-more-inner {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; color: rgba(245, 245, 247, .72);\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;\n}\n#mbptv .mb-more-ico { width: 3em; height: 3em; margin-bottom: .6em; }\n#mbptv .mb-more-label { font-size: 1.375em; font-weight: 600; }\n#mbptv .mb-card--more.is-focused .mb-card-art { background: #f5f5f7; }\n#mbptv .mb-card--more.is-focused .mb-more-inner { color: #07070a; }\n\n/* ---------- Skeletons, spinner, empty states ---------- */\n#mbptv .mb-skel { position: relative; overflow: hidden; background: #15151b; border-radius: .5em; }\n#mbptv .mb-skel:after {\n  content: ''; position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  background: -webkit-linear-gradient(left, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, .045) 50%, rgba(255, 255, 255, 0) 100%);\n  background: linear-gradient(to right, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, .045) 50%, rgba(255, 255, 255, 0) 100%);\n  -webkit-animation: mbShimmer 1.5s ease-in-out infinite; animation: mbShimmer 1.5s ease-in-out infinite;\n}\n#mbptv .mb-skel-line { height: 1.1em; width: 70%; margin-top: 1em; border-radius: .3em; }\n#mbptv .mb-skel-title { height: 4.2em; width: 34em; margin-bottom: 1.2em; border-radius: .5em; }\n#mbptv .mb-skel-meta { height: 1.4em; width: 24em; margin-bottom: 1.4em; border-radius: .3em; }\n#mbptv .mb-skel-text { height: 1.3em; width: 44em; margin-bottom: .8em; border-radius: .3em; }\n#mbptv .mb-skel-text.is-short { width: 30em; }\n#mbptv .mb-spinner { position: relative; width: 3.5em; height: 3.5em; }\n#mbptv .mb-spinner-ring {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 50%;\n  border: .3em solid rgba(255, 255, 255, .14); border-top-color: #e7bd68;\n  -webkit-animation: mbSpin .9s linear infinite; animation: mbSpin .9s linear infinite;\n}\n#mbptv .mb-spinner--sm { width: 2.25em; height: 2.25em; }\n#mbptv .mb-empty { padding: 3em 0 0; max-width: 56em; }\n#mbptv .mb-empty .mb-empty-ico { width: 4em; height: 4em; color: rgba(245, 245, 247, .3); margin-bottom: 1.5em; }\n#mbptv .mb-empty .mb-section { margin-bottom: .6em; }\n#mbptv .mb-empty .mb-body { margin-bottom: 2em; }\n#mbptv .mb-empty--inline { padding: 1.5em 0 1em; white-space: normal; }\n#mbptv .mb-empty--inline .mb-body { margin-bottom: 1em; }\n#mbptv .mb-grid-note { width: 100%; -webkit-flex-basis: 100%; flex-basis: 100%; padding: 1.5em 0 3em; }\n#mbptv .mb-grid-note .mb-body { margin-bottom: 1em; }\n\n/* ---------- Loading screen ---------- */\n#mbptv .mb-loading {\n  background: #07070a;\n  background: -webkit-radial-gradient(50% 42%, circle, #17140d 0%, #07070a 55%);\n  background: radial-gradient(circle at 50% 42%, #17140d 0%, #07070a 55%);\n}\n#mbptv .mb-loading-inner {\n  position: absolute; left: 0; right: 0; top: 50%; margin-top: -9em; text-align: center;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: center; align-items: center;\n}\n#mbptv .mb-wordmark { margin-top: 1.4em; font-size: 2.5em; font-weight: 800; letter-spacing: -.01em; color: #f5f5f7; }\n#mbptv .mb-wordmark span { color: #e7bd68; }\n#mbptv .mb-loading .mb-spinner { margin-top: 2.5em; }\n#mbptv .mb-loading-msg { margin-top: 1.5em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); height: 1.4em; }\n\n/* ---------- Home ---------- */\n#mbptv .mb-hero { position: absolute; left: 0; top: 0; width: 100%; height: 74%; overflow: hidden; }\n#mbptv .mb-art { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv .mb-art-img {\n  position: absolute; right: 0; top: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 25%;\n  -webkit-transition: opacity .6s ease-out; transition: opacity .6s ease-out;\n}\n#mbptv .mb-art-poster {\n  position: absolute; right: -4%; top: -30%; width: 70%; height: 160%; object-fit: cover; opacity: 0;\n  -webkit-transition: opacity .6s ease-out; transition: opacity .6s ease-out;\n}\n#mbptv .mb-art-poster.is-loaded { opacity: .35; }\n#mbptv .mb-scrim-l {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  background: -webkit-linear-gradient(left, #07070a 0%, rgba(7, 7, 10, .85) 35%, rgba(7, 7, 10, 0) 70%);\n  background: linear-gradient(to right, #07070a 0%, rgba(7, 7, 10, .85) 35%, rgba(7, 7, 10, 0) 70%);\n}\n#mbptv .mb-scrim-b {\n  position: absolute; left: 0; bottom: 0; width: 100%; height: 55%;\n  background: -webkit-linear-gradient(bottom, #07070a 0%, rgba(7, 7, 10, .7) 40%, rgba(7, 7, 10, 0) 100%);\n  background: linear-gradient(to top, #07070a 0%, rgba(7, 7, 10, .7) 40%, rgba(7, 7, 10, 0) 100%);\n}\n#mbptv .mb-scrim-t {\n  position: absolute; left: 0; top: 0; width: 100%; height: 18%;\n  background: -webkit-linear-gradient(top, rgba(7, 7, 10, .55) 0%, rgba(7, 7, 10, 0) 100%);\n  background: linear-gradient(to bottom, rgba(7, 7, 10, .55) 0%, rgba(7, 7, 10, 0) 100%);\n}\n#mbptv .mb-hero-info {\n  position: absolute; left: 9em; top: 3.5em; width: 58em; height: 32.5em;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: flex-end; justify-content: flex-end;\n}\n#mbptv .mb-hero-text { -webkit-transition: opacity .2s ease-out, -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: opacity .2s ease-out, transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-home.in-rows .mb-hero-text { -webkit-transform: translate3d(0, -3.5em, 0); transform: translate3d(0, -3.5em, 0); }\n#mbptv .mb-home.in-rows .mb-hero-info .mb-btns { visibility: hidden; }\n#mbptv .mb-hero-text.is-swapping { opacity: 0; }\n#mbptv .mb-hero-info .mb-kicker { margin-bottom: .9em; }\n#mbptv .mb-hero-info .mb-display { margin-bottom: .22em; max-height: 2.1em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }\n#mbptv .mb-hero-info .mb-meta { margin-bottom: .9em; height: 1.4em; }\n#mbptv .mb-hero-info .mb-tags { margin-bottom: 1em; }\n#mbptv .mb-hero-info .mb-tag--imdb { font-size: 1.25em; height: 1.7em; line-height: 1.7em; }\n#mbptv .mb-hero-info .mb-body { width: 27em; margin-bottom: 1.1em; height: 4.35em; }\n#mbptv .mb-hero-resume { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 1.2em; height: 1.6em; }\n#mbptv .mb-hero-resume .mb-progress { width: 14em; margin-right: 1em; }\n#mbptv .mb-hero-resume .mb-meta { margin: 0; height: auto; }\n#mbptv .mb-hero-info .mb-btns { height: 4.5em; margin-left: -.1em; }\n#mbptv .mb-rows-port { position: absolute; left: 0; right: 0; top: 60.5%; bottom: 0; -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-home.in-rows .mb-rows-port { -webkit-transform: translate3d(0, -8em, 0); transform: translate3d(0, -8em, 0); }\n#mbptv .mb-rows { position: absolute; left: 0; top: 0; width: 100%; -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-row { position: relative; padding-bottom: 3.25em; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out; }\n#mbptv .mb-row.is-past { opacity: 0; }\n#mbptv .mb-row-title { margin: 0 0 .45em 5.143em; font-size: 1.75em; line-height: 1.2; font-weight: 600; color: rgba(245, 245, 247, .9); white-space: nowrap; }\n#mbptv .mb-row-view { position: relative; margin-left: 7.75em; padding: 1em 0 2.5em; margin-top: -1em; margin-bottom: -2.5em; overflow: hidden; }\n#mbptv .mb-track {\n  position: relative; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start;\n  padding: 0 5em 0 1.25em; white-space: nowrap;\n  -webkit-transition: -webkit-transform .26s cubic-bezier(.2, .8, .2, 1); transition: transform .26s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-row--wide .mb-card-title, #mbptv .mb-row--wide .mb-card-ph-title { display: none; }\n#mbptv .mb-card-label {\n  position: absolute; left: 0; right: 0; bottom: 0; padding: 2.4em .9em .7em; font-size: 1.25em; line-height: 1.3; font-weight: 700; color: #fff;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .78) 0%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .78) 0%, rgba(0, 0, 0, 0) 100%);\n}\n#mbptv .mb-card-label:empty { display: none; }\n\n/* ---------- Detail ---------- */\n#mbptv .mb-backdrop { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden; }\n#mbptv .mb-backdrop .mb-art-img { width: 100%; height: 100%; }\n#mbptv .mb-detail .mb-scrim-l {\n  background: -webkit-linear-gradient(left, #07070a 0%, rgba(7, 7, 10, .9) 30%, rgba(7, 7, 10, .35) 62%, rgba(7, 7, 10, 0) 85%);\n  background: linear-gradient(to right, #07070a 0%, rgba(7, 7, 10, .9) 30%, rgba(7, 7, 10, .35) 62%, rgba(7, 7, 10, 0) 85%);\n}\n#mbptv .mb-detail .mb-scrim-b { height: 70%; }\n#mbptv .mb-dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(7, 7, 10, .55); opacity: 0; -webkit-transition: opacity .3s ease-out; transition: opacity .3s ease-out; }\n#mbptv .is-scrolled .mb-dim { opacity: 1; }\n#mbptv .is-scrolled .mb-detail-top { opacity: 0; }\n#mbptv .mb-detail-mini {\n  position: absolute; left: 9em; top: 3.5em; width: 64em; height: 14.4em; overflow: hidden; z-index: 2; pointer-events: none; opacity: 0;\n  -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out;\n}\n#mbptv .mb-detail-mini .mb-kicker { margin-bottom: .35em; }\n#mbptv .mb-mini-title { font-size: 2.5em; line-height: 1.15; font-weight: 800; letter-spacing: -.01em; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-mini-meta { margin-top: .35em; font-size: 1.25em; line-height: 1.4; font-weight: 500; color: rgba(245, 245, 247, .72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-mini-body {\n  margin-top: .55em; max-width: 41em; height: 4.35em; font-size: 1.5em; line-height: 1.45; color: rgba(245, 245, 247, .72);\n  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;\n}\n#mbptv .is-scrolled .mb-detail-mini { opacity: 1; }\n#mbptv .mb-detail-poster {\n  position: absolute; right: 7em; top: 9em; width: 24em; height: 36em; border-radius: .75em; overflow: hidden; background: #131318;\n  box-shadow: 0 2em 5em rgba(0, 0, 0, .7);\n}\n#mbptv .mb-detail-poster img { width: 100%; height: 100%; object-fit: cover; }\n#mbptv .mb-vport { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv .mb-vscroll { position: absolute; left: 0; top: 0; width: 100%; -webkit-transition: -webkit-transform .32s cubic-bezier(.2, .8, .2, 1); transition: transform .32s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-detail-top {\n  height: 52em; padding: 0 0 2.5em 9em; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column; -webkit-justify-content: flex-end; justify-content: flex-end;\n}\n#mbptv .mb-detail-info { width: 64em; }\n#mbptv .mb-detail-info .mb-kicker { margin-bottom: .9em; }\n#mbptv .mb-detail-info .mb-display { margin-bottom: .25em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-height: 2.1em; width: 14.5em; }\n#mbptv .mb-detail-info .mb-meta { margin-bottom: 1.1em; }\n#mbptv .mb-ratings { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 1.3em; min-height: 2.2em; }\n#mbptv .mb-ratings .mb-tag--imdb { font-size: 1.25em; height: 1.7em; line-height: 1.7em; margin-right: 1.4em; }\n#mbptv .mb-detail-info .mb-body { width: 30em; margin-bottom: 1.2em; }\n#mbptv .mb-detail-info .mb-tags { margin-bottom: 1.8em; }\n#mbptv .mb-detail-info .mb-btns { height: 4.5em; }\n#mbptv .mb-detail-rows { padding-bottom: 12em; }\n#mbptv .mb-detail-rows .mb-row { padding-bottom: 2.5em; }\n#mbptv .mb-track.mb-seasons { padding-top: .5em; -webkit-flex-wrap: nowrap; flex-wrap: nowrap; -webkit-align-items: center; align-items: center; }\n#mbptv .mb-row--seasons { padding-bottom: 1.25em; }\n#mbptv .mb-episode .mb-ep-code { position: absolute; left: .8em; bottom: .7em; font-size: 1.0625em; font-weight: 800; letter-spacing: .06em; color: #fff; }\n#mbptv .mb-episode .mb-card-shade { height: 4em; }\n#mbptv .mb-ep-title { margin-top: .9em; font-size: 1.375em; line-height: 1.3; font-weight: 600; color: rgba(245, 245, 247, .86); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; -webkit-transition: -webkit-transform .18s; transition: transform .18s; }\n#mbptv .mb-ep-meta { margin-top: .2em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-episode.is-focused .mb-ep-title { color: #fff; -webkit-transform: translate3d(0, .45em, 0); transform: translate3d(0, .45em, 0); }\n#mbptv .mb-episode.is-focused .mb-ep-meta { color: rgba(245, 245, 247, .72); -webkit-transform: translate3d(0, .5em, 0); transform: translate3d(0, .5em, 0); }\n#mbptv .mb-episode .mb-ep-play {\n  position: absolute; left: 50%; top: 50%; width: 3.6em; height: 3.6em; margin: -1.8em 0 0 -1.8em; border-radius: 50%;\n  background: rgba(7, 7, 10, .55); color: #fff; opacity: 0; -webkit-transition: opacity .18s; transition: opacity .18s;\n}\n#mbptv .mb-episode .mb-ep-play .mb-ico { position: absolute; left: 1.1em; top: .95em; width: 1.7em; height: 1.7em; }\n#mbptv .mb-episode.is-focused .mb-ep-play { opacity: 1; }\n#mbptv .mb-cast { display: -webkit-box; display: -webkit-flex; display: flex; }\n#mbptv .mb-person {\n  -webkit-flex-shrink: 0; flex-shrink: 0; margin-right: 1em; padding: .85em 1.6em .95em; border-radius: 1em; background: rgba(255, 255, 255, .08); max-width: 22em;\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s; transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s;\n}\n#mbptv .mb-person-name { font-size: 1.375em; font-weight: 600; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-person-role { margin-top: .15em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-person.is-focused { background: #f5f5f7; -webkit-transform: scale(1.06); transform: scale(1.06); }\n#mbptv .mb-person.is-focused .mb-person-name { color: #07070a; }\n#mbptv .mb-person.is-focused .mb-person-role { color: rgba(7, 7, 10, .6); }\n\n/* ---------- Page header (settings / diagnostics) ---------- */\n#mbptv .mb-page-head { position: absolute; left: 9em; top: 3.5em; right: 5em; }\n#mbptv .mb-page-head .mb-kicker { margin-bottom: .6em; }\n#mbptv .mb-page-head .mb-meta { margin-top: .5em; color: rgba(245, 245, 247, .6); }\n\n/* ---------- Browse ---------- */\n#mbptv .mb-browse-head { padding: 3.5em 5em 0 9em; margin-bottom: 1.75em; }\n#mbptv .mb-browse-head .mb-kicker { margin-bottom: .6em; }\n#mbptv .mb-browse-head .mb-meta { margin-top: .4em; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-browse-tabs { padding: 0 5em 0 9em; margin-bottom: 1.25em; }\n#mbptv .mb-grid {\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; -webkit-align-items: flex-start; align-items: flex-start;\n}\n#mbptv .mb-browse .mb-grid { padding: .75em 0 0 9em; width: 102em; }\n#mbptv .mb-browse .mb-grid .mb-card { margin: 0 4.25em 2.5em 0; }\n#mbptv .mb-browse .mb-grid .mb-card:nth-child(5n) { margin-right: 0; }\n#mbptv .mb-grid-foot { height: 8em; padding-left: 9em; }\n#mbptv .mb-grid-foot .mb-spinner { margin-top: 1em; }\n#mbptv .mb-browse .mb-empty { padding-left: 9em; }\n#mbptv .mb-browse .mb-grid .mb-empty { padding-left: 0; }\n\n/* ---------- Search ---------- */\n#mbptv .mb-search-left { position: absolute; left: 9em; top: 3.5em; width: 34em; bottom: 0; }\n#mbptv .mb-query-line {\n  position: relative; height: 5em; margin-bottom: 1.25em; white-space: nowrap; overflow: hidden;\n  box-shadow: inset 0 -.14em 0 rgba(245, 245, 247, .18);\n}\n#mbptv .mb-query-line .mb-q-ico { position: absolute; left: 0; top: 1.2em; width: 2em; height: 2em; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-query-text { position: absolute; left: 3em; right: 0; top: .7em; height: 3.4em; overflow: hidden; white-space: nowrap; }\n#mbptv #mbptv-query { display: inline-block; vertical-align: top; font-size: 2.5em; line-height: 1.3; font-weight: 600; color: #f5f5f7; white-space: pre; }\n#mbptv .mb-caret { display: inline-block; vertical-align: top; width: .2em; height: 2.7em; margin: .3em 0 0 .15em; border-radius: .1em; background: #e7bd68; -webkit-animation: mbBlink 1.05s step-end infinite; animation: mbBlink 1.05s step-end infinite; }\n#mbptv .mb-placeholder { position: absolute; left: 1.55em; top: .45em; font-size: 2em; line-height: 1.3; font-weight: 500; color: rgba(245, 245, 247, .5); display: none; }\n#mbptv .mb-query-line.is-empty .mb-placeholder { display: block; }\n#mbptv .mb-keyboard { width: 35em; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-flex-wrap: wrap; flex-wrap: wrap; }\n#mbptv .mb-key {\n  width: 5em; height: 3.4em; margin: 0 .8em .7em 0; border-radius: .6em; background: rgba(255, 255, 255, .08); color: #f5f5f7;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center;\n  -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1), background-color .15s, color .15s; transition: transform .15s cubic-bezier(.2, .8, .2, 1), background-color .15s, color .15s;\n}\n#mbptv .mb-key-label { font-size: 1.625em; font-weight: 600; line-height: 1; text-transform: uppercase; }\n#mbptv .mb-key .mb-ico { width: 1.6em; height: 1.6em; }\n#mbptv .mb-key--wide { width: 10.8em; }\n#mbptv .mb-key--wide .mb-key-label { font-size: 1.25em; text-transform: none; margin-left: .5em; }\n#mbptv .mb-key--go { width: 34em; margin-top: .3em; height: 3.6em; border-radius: 2em; background: rgba(231, 189, 104, .18); color: #e7bd68; }\n#mbptv .mb-key--go .mb-key-label { font-size: 1.375em; text-transform: none; margin-left: .6em; }\n#mbptv .mb-key.is-focused { background: #f5f5f7; color: #07070a; -webkit-transform: scale(1.08); transform: scale(1.08); box-shadow: 0 .5em 1.4em rgba(0, 0, 0, .5); }\n#mbptv .mb-key--go.is-focused { -webkit-transform: scale(1.03); transform: scale(1.03); }\n#mbptv .mb-suggest-box { position: absolute; left: 0; right: 5em; top: 5.5em; bottom: 0; }\n#mbptv .mb-suggest-hint { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .72); padding-top: .4em; }\n#mbptv .mb-keyboard, #mbptv .mb-caret { -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv .mb-search.in-results .mb-keyboard { opacity: .35; }\n#mbptv .mb-search.in-results .mb-caret { visibility: hidden; }\n#mbptv .mb-srow {\n  position: relative; height: 4.25em; width: 44em; padding: 0 1.25em 0 4.2em; margin: 0 0 .5em -1.25em; border-radius: .8em; color: rgba(245, 245, 247, .86); white-space: nowrap; overflow: hidden;\n  background: rgba(255, 255, 255, .05);\n  -webkit-transition: background-color .15s, color .15s, -webkit-transform .15s; transition: background-color .15s, color .15s, transform .15s;\n}\n#mbptv .mb-srow .mb-ico { position: absolute; left: 1.35em; top: 1.25em; width: 1.75em; height: 1.75em; opacity: .55; }\n#mbptv .mb-srow-label { display: block; font-size: 1.75em; line-height: 2.43em; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-search-right { position: absolute; left: 47em; right: 0; top: 3.5em; bottom: 0; }\n#mbptv .mb-results-head { height: 5em; padding-top: .35em; white-space: nowrap; overflow: hidden; }\n#mbptv .mb-results-head .mb-section { font-size: 2.25em; font-weight: 700; display: inline-block; max-width: 24em; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }\n#mbptv .mb-results-head .mb-count { display: inline-block; margin-left: 1em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); vertical-align: bottom; line-height: 2.2; }\n#mbptv .mb-search-tabs { height: 4.5em; margin-bottom: .25em; }\n#mbptv .mb-grid-port { position: absolute; left: -1.5em; right: 0; top: 10em; bottom: 0; overflow: hidden; }\n#mbptv .mb-search .mb-grid { padding: 1em 0 12em 1.5em; -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-search .mb-grid .mb-card { margin: 0 2em 2.25em 0; }\n#mbptv .mb-search .mb-grid .mb-card:nth-child(4n) { margin-right: 0; }\n#mbptv .mb-discover { padding-top: .35em; width: 66em; }\n#mbptv .mb-discover .mb-section { margin-bottom: 1em; }\n#mbptv .mb-discover .mb-chiprow { margin-bottom: 2.25em; }\n#mbptv .mb-discover-hint { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .72); margin-bottom: 2.4em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n\n/* ---------- Settings ---------- */\n#mbptv .mb-settings-body { position: absolute; left: 9em; top: 13em; right: 5em; bottom: 3em; }\n#mbptv .mb-list { width: 58em; }\n#mbptv .mb-lrow {\n  position: relative; height: 4.75em; margin-bottom: .5em; padding: 0 1.75em 0 5em; border-radius: .8em; background: rgba(255, 255, 255, .035); color: rgba(245, 245, 247, .8);\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;\n  -webkit-transition: background-color .15s, color .15s, -webkit-transform .15s; transition: background-color .15s, color .15s, transform .15s;\n}\n#mbptv .mb-lrow > .mb-ico { position: absolute; left: 1.75em; top: 1.6em; width: 1.6em; height: 1.6em; opacity: .7; }\n#mbptv .mb-lrow-label { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; font-size: 1.5em; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-lrow-value { font-size: 1.375em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; margin-left: 1em; }\n#mbptv .mb-lrow-chev { width: 1.5em; height: 1.5em; margin-left: .6em; opacity: .5; }\n#mbptv .mb-toggle { position: relative; width: 3.6em; height: 2em; border-radius: 1em; background: rgba(255, 255, 255, .2); margin-left: 1em; -webkit-transition: background-color .18s; transition: background-color .18s; }\n#mbptv .mb-toggle-knob { position: absolute; left: .2em; top: .2em; width: 1.6em; height: 1.6em; border-radius: 50%; background: #f5f5f7; -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: transform .18s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-toggle.is-on { background: #35c46a; }\n#mbptv .mb-toggle.is-on .mb-toggle-knob { -webkit-transform: translate3d(1.6em, 0, 0); transform: translate3d(1.6em, 0, 0); }\n#mbptv .mb-aside { position: absolute; left: 64em; top: 0; right: 0; }\n#mbptv .mb-aside .mb-ico { width: 3.5em; height: 3.5em; color: #e7bd68; margin-bottom: 1.25em; }\n#mbptv .mb-aside .mb-section { margin-bottom: .6em; }\n#mbptv .mb-aside .mb-body { max-width: 30em; }\n#mbptv .mb-about { position: absolute; left: 0; bottom: 0; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; }\n\n/* ---------- Diagnostics ---------- */\n#mbptv .mb-diag-facts { position: absolute; left: 9em; top: 14.5em; width: 44em; }\n#mbptv .mb-fact { margin-bottom: 1.1em; }\n#mbptv .mb-fact-k { font-size: 1.25em; font-weight: 600; color: rgba(245, 245, 247, .6); margin-bottom: .15em; }\n#mbptv .mb-fact-v { font-size: 1.5em; font-weight: 500; color: #f5f5f7; word-wrap: break-word; line-height: 1.35; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }\n#mbptv .mb-fact-v.is-warn { color: #e7bd68; }\n#mbptv .mb-diag-facts .mb-btns { margin-top: 1.5em; }\n#mbptv .mb-diag-log { position: absolute; left: 56em; right: 5em; top: 14.5em; bottom: 3em; overflow: hidden; border-radius: 1em; background: rgba(255, 255, 255, .04); }\n#mbptv .mb-diag-lines { padding: 1em; -webkit-transition: -webkit-transform .2s ease-out; transition: transform .2s ease-out; }\n#mbptv .mb-logline { padding: .5em .8em; border-radius: .5em; font-family: Consolas, \"DejaVu Sans Mono\", monospace; font-size: 1.375em; line-height: 1.35; color: rgba(245, 245, 247, .72); word-wrap: break-word; }\n#mbptv .mb-logline.is-error { color: #ff8a73; }\n#mbptv .mb-logline.is-warn { color: #e7bd68; }\n#mbptv .mb-srow.is-focused, #mbptv .mb-lrow.is-focused, #mbptv .mb-logline.is-focused { background: #f5f5f7; color: #07070a; box-shadow: none; -webkit-transform: scale(1.02); transform: scale(1.02); }\n#mbptv .mb-srow.is-focused .mb-ico, #mbptv .mb-lrow.is-focused > .mb-ico { opacity: 1; }\n#mbptv .mb-lrow.is-focused .mb-lrow-value { color: rgba(7, 7, 10, .6); }\n#mbptv .mb-lrow.is-focused .mb-toggle { background: rgba(7, 7, 10, .28); }\n#mbptv .mb-lrow.is-focused .mb-toggle.is-on { background: #35c46a; }\n\n/* ---------- Sign-in, error, generic centred states ---------- */\n#mbptv .mb-signin {\n  background: #07070a;\n  background: -webkit-radial-gradient(50% 30%, circle, #1c170c 0%, #0b0a0c 45%, #07070a 70%);\n  background: radial-gradient(circle at 50% 30%, #1c170c 0%, #0b0a0c 45%, #07070a 70%);\n}\n#mbptv .mb-center { position: absolute; left: 50%; top: 50%; width: 52em; margin-left: -26em; -webkit-transform: translate3d(0, -50%, 0); transform: translate3d(0, -50%, 0); text-align: center; }\n#mbptv .mb-center .mb-mono { margin: 0 auto 2em; }\n#mbptv .mb-center .mb-h1 { text-align: center; margin-bottom: .5em; }\n#mbptv .mb-center .mb-body { text-align: center; margin: 0 auto 2.5em; max-width: 42em; }\n#mbptv .mb-stack { width: 30em; margin: 0 auto; }\n#mbptv .mb-stack .mb-btn { width: 100%; margin: 0 0 1em; -webkit-justify-content: center; justify-content: center; height: 4em; }\n#mbptv .mb-note { margin-top: 1.5em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); text-align: center; line-height: 1.5; }\n#mbptv .mb-state { position: absolute; left: 9em; top: 50%; width: 70em; -webkit-transform: translate3d(0, -50%, 0); transform: translate3d(0, -50%, 0); }\n#mbptv .mb-state .mb-state-ico { width: 4.5em; height: 4.5em; color: #e7bd68; margin-bottom: 1.75em; }\n#mbptv .mb-state .mb-h1 { margin-bottom: .45em; }\n#mbptv .mb-state .mb-body { max-width: 46em; margin-bottom: .6em; }\n#mbptv .mb-state .mb-code { font-size: 1.0625em; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: rgba(245, 245, 247, .6); margin-bottom: 2.5em; }\n\n/* ---------- Layers: sheet and dialog ---------- */\n#mbptv .mb-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 40; }\n#mbptv .mb-layer-dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, .72); -webkit-animation: mbFadeIn .2s ease-out; animation: mbFadeIn .2s ease-out; }\n#mbptv .mb-sheet {\n  position: absolute; right: 0; top: 0; bottom: 0; width: 40em; padding: 4em 4em 3em 3.5em; background: #131318;\n  box-shadow: -2em 0 5em rgba(0, 0, 0, .55);\n  -webkit-animation: mbSlideIn .26s cubic-bezier(.2, .8, .2, 1); animation: mbSlideIn .26s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-sheet .mb-kicker { margin-bottom: .6em; }\n#mbptv .mb-sheet .mb-h1 { font-size: 2.25em; margin-bottom: .35em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-sheet-sub { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); margin-bottom: 1.8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-sheet-port { position: absolute; left: 2.5em; right: 3em; top: 14.5em; bottom: 6em; overflow: hidden; }\n#mbptv .mb-sheet-list { padding: 1em; -webkit-transition: -webkit-transform .22s ease-out; transition: transform .22s ease-out; }\n#mbptv .mb-source {\n  position: relative; min-height: 5.75em; margin-bottom: .75em; padding: 1.05em 1.25em 1.05em 7.5em; border-radius: .9em; background: rgba(255, 255, 255, .05);\n  -webkit-transition: background-color .15s, -webkit-transform .15s; transition: background-color .15s, transform .15s;\n}\n#mbptv .mb-qbadge {\n  position: absolute; left: 1.25em; top: 1.4em; width: 5.2em; height: 2.2em; line-height: 2.2em; text-align: center; border-radius: .4em;\n  font-size: 1.0625em; font-weight: 800; letter-spacing: .04em; background: rgba(255, 255, 255, .14); color: #f5f5f7;\n}\n#mbptv .mb-qbadge.is-4k { background: #e7bd68; color: #1a1408; }\n#mbptv .mb-qbadge.is-1080 { background: rgba(245, 245, 247, .16); color: #f5f5f7; }\n#mbptv .mb-source-file { font-size: 1.25em; line-height: 1.35; font-weight: 600; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv .mb-source-meta { margin-top: .3em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); white-space: nowrap; }\n#mbptv .mb-source-pref { position: absolute; right: 1.25em; bottom: 1.1em; font-size: 1.0625em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #35c46a; }\n#mbptv .mb-source.is-focused { background: #f5f5f7; -webkit-transform: scale(1.02); transform: scale(1.02); }\n#mbptv .mb-source.is-focused .mb-source-file { color: #07070a; }\n#mbptv .mb-source.is-focused .mb-source-meta { color: rgba(7, 7, 10, .6); }\n#mbptv .mb-source.is-focused .mb-qbadge { background: #07070a; color: #f5f5f7; }\n#mbptv .mb-source.is-focused .mb-source-pref { color: #1f8a46; }\n#mbptv .mb-opt { position: relative; height: 4.25em; margin-bottom: .6em; padding: 0 1.5em; border-radius: .8em; background: rgba(255, 255, 255, .05); display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }\n#mbptv .mb-opt-label { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; font-size: 1.5em; font-weight: 500; }\n#mbptv .mb-opt .mb-ico { width: 1.6em; height: 1.6em; color: #35c46a; }\n#mbptv .mb-opt.is-focused { background: #f5f5f7; color: #07070a; }\n#mbptv .mb-opt.is-focused .mb-ico { color: #1f8a46; }\n#mbptv .mb-sheet-label { margin: 1.6em 0 .9em .15em; font-size: 1.0625em; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-sheet-hint { position: absolute; left: 3.5em; bottom: 2.5em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-dialog {\n  position: absolute; left: 50%; top: 50%; width: 46em; margin: -12em 0 0 -23em; padding: 3.5em 3.5em 3em; border-radius: 1.25em; background: #1c1c23; text-align: center;\n  box-shadow: 0 2em 6em rgba(0, 0, 0, .7);\n  -webkit-animation: mbPop .2s cubic-bezier(.2, .8, .2, 1); animation: mbPop .2s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv .mb-dialog .mb-h1 { font-size: 2.5em; text-align: center; margin-bottom: .4em; }\n#mbptv .mb-dialog .mb-body { text-align: center; margin-bottom: 2em; }\n#mbptv .mb-dialog .mb-btns { -webkit-justify-content: center; justify-content: center; }\n#mbptv .mb-dialog .mb-btn { min-width: 12em; -webkit-justify-content: center; justify-content: center; margin: 0 .6em; }\n\n/* ---------- Starting-playback overlay ---------- */\n#mbptv .mb-starting { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 35; background: #07070a; -webkit-animation: mbFadeIn .2s ease-out; animation: mbFadeIn .2s ease-out; }\n#mbptv .mb-starting .mb-art-img { width: 100%; }\n#mbptv .mb-starting .mb-art-img.is-loaded { opacity: .5; }\n#mbptv .mb-starting-inner { position: absolute; left: 9em; bottom: 8em; width: 70em; }\n#mbptv .mb-starting-inner .mb-spinner { margin-bottom: 2.25em; }\n#mbptv .mb-starting-inner .mb-kicker { margin-bottom: .8em; }\n#mbptv .mb-starting-inner .mb-display { margin-bottom: .35em; }\n#mbptv .mb-starting-inner .mb-meta { color: rgba(245, 245, 247, .6); }\n\n/* ---------- Toast ---------- */\n#mbptv .mb-toast {\n  position: absolute; left: 50%; bottom: 4em; z-index: 60; max-width: 70em; padding: 1em 2em; border-radius: 2em; background: rgba(28, 28, 35, .96); color: #f5f5f7;\n  font-size: 1.375em; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  box-shadow: 0 1em 3em rgba(0, 0, 0, .6);\n  opacity: 0; visibility: hidden;\n  -webkit-transform: translate3d(-50%, 1em, 0); transform: translate3d(-50%, 1em, 0);\n  -webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out, visibility 0s linear .2s; transition: opacity .2s ease-out, transform .2s ease-out, visibility 0s linear .2s;\n}\n#mbptv .mb-toast.is-visible {\n  opacity: 1; visibility: visible; -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0);\n  -webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out; transition: opacity .2s ease-out, transform .2s ease-out;\n}\n\n/* ---------- Player OSD (top level) ---------- */\n#mbptv-osd {\n  position: fixed; left: 0; right: 0; bottom: 0; height: 17em; z-index: 2147483001; pointer-events: none; color: #f5f5f7; line-height: 1.3;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .88) 0%, rgba(0, 0, 0, .55) 55%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .88) 0%, rgba(0, 0, 0, .55) 55%, rgba(0, 0, 0, 0) 100%);\n  opacity: 0; visibility: hidden;\n  -webkit-transition: opacity .25s ease-out, visibility 0s linear .25s; transition: opacity .25s ease-out, visibility 0s linear .25s;\n}\n#mbptv-osd.is-visible { opacity: 1; visibility: visible; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-osd div, #mbptv-osd span { margin: 0; padding: 0; border: 0; -webkit-box-sizing: border-box; box-sizing: border-box; font-family: inherit; color: inherit; font-size: 100%; }\n#mbptv-osd .mbo-inner { position: absolute; left: 5em; right: 5em; bottom: 3em; }\n#mbptv-osd .mbo-title { font-size: 2em; font-weight: 700; margin-bottom: .7em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-osd .mbo-sub { font-size: 1.375em; font-weight: 500; color: rgba(245, 245, 247, .72); margin: -.6em 0 .8em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-osd .mbo-row { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }\n#mbptv-osd .mbo-state { width: 2.2em; height: 2.2em; margin-right: 1.25em; }\n#mbptv-osd .mbo-state .mb-ico { width: 100%; height: 100%; }\n#mbptv-osd .mbo-spin { display: block; width: 100%; height: 100%; border-radius: 50%; border: .22em solid rgba(255, 255, 255, .2); border-top-color: #e7bd68; -webkit-animation: mbSpin .9s linear infinite; animation: mbSpin .9s linear infinite; }\n#mbptv-osd.mb-reduce .mbo-spin { -webkit-animation: mbSpin 1.2s linear infinite !important; animation: mbSpin 1.2s linear infinite !important; }\n#mbptv-osd .mbo-bar { position: relative; -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: .45em; border-radius: .25em; background: rgba(255, 255, 255, .25); }\n#mbptv-osd .mbo-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: .25em; background: #e7bd68; }\n#mbptv-osd .mbo-knob { position: absolute; top: 50%; width: 1.1em; height: 1.1em; margin: -.55em 0 0 -.55em; border-radius: 50%; background: #fff; box-shadow: 0 0 .6em rgba(0, 0, 0, .6); }\n#mbptv-osd .mbo-time { margin-left: 1.5em; font-size: 1.375em; font-weight: 600; white-space: nowrap; }\n#mbptv-osd .mbo-hints { margin-top: 1.1em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .72); white-space: nowrap; }\n#mbptv-osd .mbo-hint { display: inline-block; margin-right: 2.2em; }\n#mbptv-osd .mbo-key { display: inline-block; padding: .1em .5em; margin-right: .5em; border-radius: .3em; background: rgba(255, 255, 255, .16); color: #f5f5f7; font-weight: 700; }\n#mbptv-osd .mbo-key.mbo-key--blue { width: 1em; height: 1em; padding: 0; border-radius: 50%; background: #2f6fe4; vertical-align: -.1em; }\n#mbptv-osd .mbo-seek { position: absolute; left: 50%; bottom: 7em; width: 5.4em; margin-left: -2.7em; padding: .3em 0; border-radius: 1em; background: rgba(0, 0, 0, .6); text-align: center; font-size: 1.75em; font-weight: 700; opacity: 0; -webkit-transition: opacity .2s; transition: opacity .2s; }\n#mbptv-osd .mbo-seek.is-on { opacity: 1; }\n\n/* ---------- Website mode: TV pill and focus ring (top level) ---------- */\n#mbptv-pill {\n  position: fixed; left: 2.5em; bottom: 2.5em; z-index: 2147483001; height: 3.6em; padding: .3em 1.4em .3em .3em; border-radius: 2em;\n  background: rgba(20, 20, 26, .92); color: #f5f5f7; line-height: 1.3; cursor: pointer;\n  box-shadow: 0 .8em 2em rgba(0, 0, 0, .5);\n  display: none;\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s; transition: transform .18s cubic-bezier(.2, .8, .2, 1), background-color .18s;\n}\n#mbptv-pill.is-visible { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; }\n#mbptv-pill div, #mbptv-pill span { margin: 0; padding: 0; border: 0; -webkit-box-sizing: border-box; box-sizing: border-box; font-family: inherit; font-size: 100%; }\n#mbptv-pill .mb-mono { width: 3em; height: 3em; border-radius: 50%; }\n#mbptv-pill .mb-mono-m { font-size: 1.6em; line-height: 1.875em; }\n#mbptv-pill .mbp-key { display: inline-block; width: 1em; height: 1em; border-radius: 50%; background: #2f6fe4; margin: 0 0 0 .9em; vertical-align: -.1em; }\n#mbptv-pill .mbp-label { margin-left: .6em; font-size: 1.25em; font-weight: 700; color: #f5f5f7; }\n#mbptv-pill.is-focused { background: #f5f5f7; -webkit-transform: scale(1.06); transform: scale(1.06); }\n#mbptv-pill.is-focused .mbp-label { color: #07070a; }\n#mbptv-ring {\n  position: fixed; left: 0; top: 0; width: 0; height: 0; z-index: 2147483000; pointer-events: none; display: none;\n  border-radius: .6em; box-shadow: 0 0 0 .25em #fff, 0 0 0 .55em rgba(0, 0, 0, .55), 0 0 2em .6em rgba(0, 0, 0, .4);\n  -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1), width .15s, height .15s; transition: transform .15s cubic-bezier(.2, .8, .2, 1), width .15s, height .15s;\n}\n#mbptv-ring.is-visible { display: block; }\n\n/* The site's own source sidebar stays in the DOM (we click its rows) but is never shown while our sheet is open. */\nhtml.mbptv-sources .sidebarbg2 { opacity: .01 !important; }\n#mbptv-osd .mbo-kico { width: 1em; height: 1em; vertical-align: -.14em; }\n#mbptv.is-hidden .mb-toast { bottom: auto; top: 3.5em; }\n\n/* ---------- Page-level state (classes on <html>, set per mode by App.setModeClass, removed by Boot.teardown) ---------- */\n/* The page behind the shell or the player never scrolls, and its scrollbar never shows at the right edge. */\nhtml.mbptv-lock, html.mbptv-lock body { overflow: hidden !important; }\nhtml.mbptv-lock::-webkit-scrollbar, html.mbptv-lock body::-webkit-scrollbar { width: 0; height: 0; display: none; }\n/* Quiet page (Site.live.quiet: Home, lists and search under the shell, never a title page): the website is not painted\n   under the app. visibility keeps its layout, so its own scripts behave the same. */\nhtml.mbptv-quiet body > :not([id^=\"mbptv\"]) { visibility: hidden !important; }\n/* Player mode: the website player's own controls never show under our OSD. Captions stay, and so do JW Player's\n   buffering and error displays. */\nhtml.mbptv-player .jwplayer:not(.jw-state-buffering):not(.jw-state-error) .jw-display, html.mbptv-player .jwplayer:not(.jw-state-error) .jw-title,\nhtml.mbptv-player .jw-controlbar, html.mbptv-player .jw-controls-backdrop, html.mbptv-player .jw-dock, html.mbptv-player .jw-logo,\nhtml.mbptv-player .jw-nextup-container, html.mbptv-player .jw-settings-menu, html.mbptv-player .jw-tooltip, html.mbptv-player .jw-rightclick,\nhtml.mbptv-player .video-js .vjs-control-bar, html.mbptv-player .video-js .vjs-big-play-button { display: none !important; }\n/* Player controls mode (Blue in the player): the website player's controls stay visible for the focus ring. */\nhtml.mbptv-jwctl .jwplayer .jw-controls, html.mbptv-jwctl .jwplayer .jw-controlbar, html.mbptv-jwctl .video-js .vjs-control-bar { visibility: visible !important; opacity: 1 !important; }\n\n/* ---------- TV performance mode (#mbptv.mb-perf; Prefs performance, see Kit.perf) ----------\n   What costs a TV GPU most goes: blurred shadows (focus keeps its white ring, drawn without blur), opacity fades on\n   full-screen layers (art and dims swap at once), width animations (they re-lay the page out every frame) and endless\n   animations (the caret, the skeleton shimmer). Focus scales a little less; transforms still animate. These rules\n   come last so they win over the rules they calm. */\n#mbptv.mb-perf .mb-card-art { -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1); transition: transform .15s cubic-bezier(.2, .8, .2, 1); }\n#mbptv.mb-perf .mb-card.is-focused .mb-card-art { -webkit-transform: scale(1.05); transform: scale(1.05); box-shadow: 0 0 0 .22em #fff; }\n#mbptv.mb-perf .mb-btn, #mbptv.mb-perf .mb-chip, #mbptv.mb-perf .mb-key, #mbptv.mb-perf .mb-person {\n  -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1); transition: transform .15s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv.mb-perf .mb-btn.is-focused, #mbptv.mb-perf .mb-chip.is-focused { -webkit-transform: scale(1.04); transform: scale(1.04); box-shadow: none; }\n#mbptv.mb-perf .mb-key.is-focused { -webkit-transform: scale(1.05); transform: scale(1.05); box-shadow: none; }\n#mbptv.mb-perf .mb-key--go.is-focused { -webkit-transform: scale(1.02); transform: scale(1.02); }\n#mbptv.mb-perf .mb-mono, #mbptv.mb-perf .mb-detail-poster, #mbptv.mb-perf .mb-sheet, #mbptv.mb-perf .mb-dialog, #mbptv.mb-perf .mb-toast { box-shadow: none; }\n#mbptv.mb-perf .mb-screen.is-current, #mbptv.mb-perf .mb-layer-dim, #mbptv.mb-perf .mb-dialog, #mbptv.mb-perf .mb-starting { -webkit-animation: none; animation: none; }\n#mbptv.mb-perf .mb-img, #mbptv.mb-perf .mb-art-img, #mbptv.mb-perf .mb-art-poster, #mbptv.mb-perf .mb-row, #mbptv.mb-perf .mb-dim,\n#mbptv.mb-perf .mb-detail-top, #mbptv.mb-perf .mb-detail-mini, #mbptv.mb-perf .mb-rail, #mbptv.mb-perf .mb-rail-bg,\n#mbptv.mb-perf .mb-rail-label, #mbptv.mb-perf .mb-rail-brand, #mbptv.mb-perf .mb-keyboard,\n#mbptv.mb-perf .mb-ep-play, #mbptv.mb-perf .mb-toggle { -webkit-transition: none; transition: none; }\n#mbptv.mb-perf .mb-rail-item, #mbptv.mb-perf .mb-srow, #mbptv.mb-perf .mb-lrow, #mbptv.mb-perf .mb-source { -webkit-transition: -webkit-transform .12s; transition: transform .12s; }\n#mbptv.mb-perf .mb-hero-text { -webkit-transition: opacity .1s linear, -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: opacity .1s linear, transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv.mb-perf .mb-caret, #mbptv.mb-perf .mb-skel:after { -webkit-animation: none; animation: none; }\n#mbptv.mb-perf .mb-skel:after { display: none; }\n#mbptv.mb-perf #mbptv-player .mbp-art, #mbptv.mb-perf #mbptv-player .mbp-art-img, #mbptv.mb-perf #mbptv-player .mbp-dim,\n#mbptv.mb-perf #mbptv-player .mbp-osd, #mbptv.mb-perf #mbptv-player .mbp-un-scrim { -webkit-transition: none; transition: none; }\n#mbptv.mb-perf #mbptv-player[data-state=\"playing\"] .mbp-art, #mbptv.mb-perf #mbptv-player.is-osd .mbp-osd,\n#mbptv.mb-perf #mbptv-player.is-upnext .mbp-un-scrim { -webkit-transition: none; transition: none; }\n#mbptv.mb-perf #mbptv-player .mbp-skip.is-focused { box-shadow: none; }\n\n/* Native player (src/55-player.js), mounted inside #mbptv and scoped under #mbptv-player. Same tokens and em scale\n   as shell.css (1em = 18px at 1920x1080): bg #07070a, elevated #131318, elevated-2 #1c1c23, text #f5f5f7,\n   text-2 rgba(245,245,247,.72), text-3 rgba(245,245,247,.46), gold #e7bd68, success #35c46a.\n   Chromium 47 safe: prefixed flexbox, margins, prefixed transforms. Only opacity and transform animate, and large\n   layers carry no box-shadow (the TV compositor pays for every blurred pixel). */\n\n#mbptv-player {\n  position: fixed; left: 0; top: 0; width: 100%; height: 100%; z-index: 50; overflow: hidden;\n  background: #000; color: #f5f5f7; outline: none; cursor: default;\n  pointer-events: auto; /* #mbptv is pointer-transparent outside shell mode: never let a pointer reach the site */\n  font-family: \"SamsungOne\", \"Samsung Sans\", \"TizenSans\", \"LG Smart UI\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  font-size: 0.9375vw; line-height: 1.3; font-weight: 400; font-style: normal; text-align: left; direction: ltr;\n  letter-spacing: 0; text-transform: none; -webkit-font-smoothing: antialiased;\n  -webkit-user-select: none; user-select: none; -webkit-box-sizing: border-box; box-sizing: border-box;\n}\n#mbptv-player div, #mbptv-player span, #mbptv-player img, #mbptv-player svg, #mbptv-player video {\n  -webkit-box-sizing: border-box; box-sizing: border-box; margin: 0; padding: 0; border: 0; outline: none; float: none;\n  max-width: none; font-family: inherit; line-height: inherit; letter-spacing: inherit; color: inherit; text-decoration: none;\n}\n#mbptv-player div, #mbptv-player span { font-size: 100%; font-weight: inherit; }\n#mbptv-player img { display: block; }\n#mbptv-player .mbp-ico { display: inline-block; width: 1.5em; height: 1.5em; line-height: 0; vertical-align: middle; -webkit-flex-shrink: 0; flex-shrink: 0; }\n#mbptv-player .mbp-ico svg { display: block; width: 100%; height: 100%; }\n\n@-webkit-keyframes mbpSpin { from { -webkit-transform: rotate(0deg); } to { -webkit-transform: rotate(360deg); } }\n@keyframes mbpSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }\n@-webkit-keyframes mbpFlash {\n  0% { opacity: 0; -webkit-transform: scale(.82); } 22% { opacity: 1; -webkit-transform: scale(1); } 100% { opacity: 0; -webkit-transform: scale(1.22); }\n}\n@keyframes mbpFlash {\n  0% { opacity: 0; transform: scale(.82); } 22% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1.22); }\n}\n@-webkit-keyframes mbpFade { from { opacity: 0; } to { opacity: 1; } }\n@keyframes mbpFade { from { opacity: 0; } to { opacity: 1; } }\n@-webkit-keyframes mbpPop { from { opacity: 0; -webkit-transform: translate3d(0, -46%, 0) scale(.96); } to { opacity: 1; -webkit-transform: translate3d(0, -50%, 0) scale(1); } }\n@keyframes mbpPop { from { opacity: 0; transform: translate3d(0, -46%, 0) scale(.96); } to { opacity: 1; transform: translate3d(0, -50%, 0) scale(1); } }\n\n/* ---------- Video and artwork ---------- */\n#mbptv-player .mbp-video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; object-fit: contain; background: #000; }\n#mbptv-player .mbp-art {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 1; background: #000;\n  -webkit-transition: opacity .45s ease-out; transition: opacity .45s ease-out;\n}\n#mbptv-player .mbp-art-img {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; opacity: 0;\n  -webkit-transition: opacity .6s ease-out; transition: opacity .6s ease-out;\n}\n#mbptv-player .mbp-art-img.is-loaded { opacity: .35; }\n#mbptv-player .mbp-art-scrim {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .92) 0%, rgba(0, 0, 0, .55) 38%, rgba(0, 0, 0, .15) 70%, rgba(0, 0, 0, .35) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .92) 0%, rgba(0, 0, 0, .55) 38%, rgba(0, 0, 0, .15) 70%, rgba(0, 0, 0, .35) 100%);\n}\n#mbptv-player[data-state=\"playing\"] .mbp-art { opacity: 0; visibility: hidden; -webkit-transition: opacity .45s ease-out, visibility 0s linear .45s; transition: opacity .45s ease-out, visibility 0s linear .45s; }\n\n/* ---------- Type shared by every panel ---------- */\n#mbptv-player .mbp-kicker {\n  font-size: 1.0625em; line-height: 1.3; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: #e7bd68;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n}\n#mbptv-player .mbp-sub-code { color: #f5f5f7; font-weight: 700; margin-right: .55em; }\n#mbptv-player .mbp-sub-text { color: rgba(245, 245, 247, .72); }\n#mbptv-player .mbp-key {\n  display: inline-block; padding: .12em .55em; margin-right: .55em; border-radius: .35em; line-height: 1.35;\n  background: rgba(255, 255, 255, .16); color: #f5f5f7; font-weight: 700; font-size: .9em; letter-spacing: .02em;\n}\n\n/* ---------- Loading ---------- */\n#mbptv-player .mbp-loading {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 5; opacity: 0; visibility: hidden;\n  -webkit-transition: opacity .3s ease-out, visibility 0s linear .3s; transition: opacity .3s ease-out, visibility 0s linear .3s;\n}\n#mbptv-player[data-state=\"loading\"] .mbp-loading { opacity: 1; visibility: visible; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-player .mbp-spin { position: absolute; left: 50%; top: 42%; width: 5em; height: 5em; margin: -2.5em 0 0 -2.5em; }\n#mbptv-player .mbp-spin-ring {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: 50%;\n  border: .3em solid rgba(255, 255, 255, .14); border-top-color: #e7bd68;\n  -webkit-animation: mbpSpin .9s linear infinite; animation: mbpSpin .9s linear infinite;\n}\n#mbptv-player .mbp-load-info { position: absolute; left: 7em; right: 30em; bottom: 6em; }\n#mbptv-player .mbp-load-info .mbp-kicker { margin-bottom: 1em; }\n#mbptv-player .mbp-load-title {\n  font-size: 4.5em; line-height: 1.04; font-weight: 800; letter-spacing: -.015em; color: #f5f5f7;\n  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; max-height: 2.12em;\n}\n#mbptv-player .mbp-load-sub { margin-top: .45em; font-size: 1.75em; line-height: 1.3; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-load-status { margin-top: 1.5em; font-size: 1.25em; line-height: 1.4em; font-weight: 500; color: rgba(245, 245, 247, .46); height: 1.4em; }\n#mbptv-player .mbp-load-hint { position: absolute; right: 7em; bottom: 6em; height: 1.75em; line-height: 1.75em; color: rgba(245, 245, 247, .56); white-space: nowrap; }\n#mbptv-player .mbp-load-hint span { font-size: 1.25em; font-weight: 500; }\n#mbptv-player .mbp-load-hint .mbp-key { font-size: 1.125em; font-weight: 700; }\n\n/* Buffering after playback started: a quiet spinner over the picture. */\n#mbptv-player .mbp-buffer { position: absolute; left: 50%; top: 50%; width: 4.5em; height: 4.5em; margin: -2.25em 0 0 -2.25em; z-index: 7; opacity: 0; visibility: hidden; -webkit-transition: opacity .2s, visibility 0s linear .2s; transition: opacity .2s, visibility 0s linear .2s; }\n#mbptv-player.is-buffering .mbp-buffer { opacity: 1; visibility: visible; -webkit-transition: opacity .3s ease-out .35s; transition: opacity .3s ease-out .35s; }\n\n/* ---------- Play/pause flash ---------- */\n#mbptv-player .mbp-flash {\n  position: absolute; left: 50%; top: 50%; width: 8em; height: 8em; margin: -4em 0 0 -4em; z-index: 8; border-radius: 50%;\n  background: rgba(0, 0, 0, .5); color: #f5f5f7; opacity: 0; pointer-events: none;\n}\n#mbptv-player .mbp-flash .mbp-ico { position: absolute; left: 2.5em; top: 2.5em; width: 3em; height: 3em; }\n#mbptv-player .mbp-flash .mbp-flash-play { display: none; }\n#mbptv-player .mbp-flash.is-play .mbp-flash-play { display: block; }\n#mbptv-player .mbp-flash.is-play .mbp-flash-pause { display: none; }\n#mbptv-player .mbp-flash.is-on { -webkit-animation: mbpFlash .7s ease-out both; animation: mbpFlash .7s ease-out both; }\n\n/* Paused: the picture dims a little behind the controls. */\n#mbptv-player .mbp-dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 9; background: #000; opacity: 0; pointer-events: none; -webkit-transition: opacity .3s ease-out; transition: opacity .3s ease-out; }\n#mbptv-player.is-paused.is-osd .mbp-dim, #mbptv-player.is-still .mbp-dim { opacity: .3; }\n\n/* ---------- Subtitles (our own overlay, docs/PLAYER.md \"Subtitles\") ----------\n   Centred near the bottom safe area, white with a black outline built from text-shadows (repainted only when the\n   cue changes), lifted above the controls while the OSD shows. dir=\"auto\" per line plus plaintext bidi keeps Arabic\n   and Hebrew right-to-left. Sizes: Settings > Subtitle size (data-subsize). */\n#mbptv-player .mbp-subs {\n  position: absolute; left: 10em; right: 10em; bottom: 5em; z-index: 9; text-align: center; pointer-events: none; visibility: hidden;\n  -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0);\n  -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player[data-state=\"playing\"] .mbp-subs.is-on { visibility: visible; }\n#mbptv-player.is-osd .mbp-subs { -webkit-transform: translate3d(0, -18.5em, 0); transform: translate3d(0, -18.5em, 0); }\n#mbptv-player.is-upnext .mbp-subs { -webkit-transform: translate3d(0, -17em, 0); transform: translate3d(0, -17em, 0); }\n#mbptv-player .mbp-subs-box {\n  display: inline-block; max-width: 100%; font-size: 2.75em; line-height: 1.25; font-weight: 600; color: #fff; text-align: center;\n  font-family: \"SamsungOne\", \"Samsung Sans\", \"TizenSans\", \"LG Smart UI\", \"Helvetica Neue\", Helvetica, Arial, sans-serif;\n  text-shadow: 0 0 .09em #000, 0 0 .09em #000, 0 0 .16em #000, .04em .05em .08em #000;\n}\n#mbptv-player[data-subsize=\"small\"] .mbp-subs-box { font-size: 2.25em; }\n#mbptv-player[data-subsize=\"large\"] .mbp-subs-box { font-size: 3.375em; }\n#mbptv-player .mbp-subs-line { display: block; unicode-bidi: -webkit-plaintext; unicode-bidi: plaintext; white-space: normal; word-wrap: break-word; }\n#mbptv-player .mbp-subs-i { font-style: italic; }\n#mbptv-player .mbp-subs-b { font-weight: 800; }\n#mbptv-player .mbp-subs-u { text-decoration: underline; }\n\n/* ---------- OSD ---------- */\n#mbptv-player .mbp-osd {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 10; opacity: 0; visibility: hidden; pointer-events: none;\n  -webkit-transition: opacity .3s ease-out, visibility 0s linear .3s; transition: opacity .3s ease-out, visibility 0s linear .3s;\n}\n#mbptv-player.is-osd .mbp-osd { opacity: 1; visibility: visible; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-player .mbp-osd-top {\n  position: absolute; left: 0; top: 0; width: 100%; height: 12em;\n  background: -webkit-linear-gradient(top, rgba(0, 0, 0, .55) 0%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to bottom, rgba(0, 0, 0, .55) 0%, rgba(0, 0, 0, 0) 100%);\n}\n#mbptv-player .mbp-osd-shade {\n  position: absolute; left: 0; bottom: 0; width: 100%; height: 34em;\n  background: -webkit-linear-gradient(bottom, rgba(0, 0, 0, .94) 0%, rgba(0, 0, 0, .78) 30%, rgba(0, 0, 0, .4) 64%, rgba(0, 0, 0, 0) 100%);\n  background: linear-gradient(to top, rgba(0, 0, 0, .94) 0%, rgba(0, 0, 0, .78) 30%, rgba(0, 0, 0, .4) 64%, rgba(0, 0, 0, 0) 100%);\n}\n#mbptv-player .mbp-osd-main {\n  position: absolute; left: 7em; right: 7em; bottom: 4em;\n  -webkit-transform: translate3d(0, 1.25em, 0); transform: translate3d(0, 1.25em, 0);\n  -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-osd .mbp-osd-main { -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0); }\n#mbptv-player .mbp-head { margin-bottom: 2em; max-width: 90em; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-player.is-seeking .mbp-head { opacity: .3; }\n#mbptv-player .mbp-osd-kicker { height: 1.3em; margin-bottom: .55em; opacity: 0; -webkit-transition: opacity .2s ease-out; transition: opacity .2s ease-out; }\n#mbptv-player.is-paused .mbp-osd-kicker { opacity: 1; }\n#mbptv-player .mbp-title { font-size: 3.25em; line-height: 1.12; font-weight: 800; letter-spacing: -.015em; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-subrow { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-top: .55em; height: 2em; }\n#mbptv-player .mbp-sub { -webkit-flex-shrink: 1; flex-shrink: 1; min-width: 0; font-size: 1.5em; line-height: 1.3; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-sub.is-empty { display: none; }\n#mbptv-player .mbp-badges { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; -webkit-flex-shrink: 0; flex-shrink: 0; white-space: nowrap; }\n#mbptv-player .mbp-sub + .mbp-badges { margin-left: 1.1em; }\n#mbptv-player .mbp-tag {\n  display: inline-block; height: 1.75em; line-height: 1.75em; padding: 0 .6em; margin-right: .6em; border-radius: .35em;\n  font-size: 1.0625em; font-weight: 700; letter-spacing: .04em; background: rgba(255, 255, 255, .16); color: #f5f5f7;\n}\n#mbptv-player .mbp-tag--line { background: transparent; box-shadow: inset 0 0 0 .09em rgba(245, 245, 247, .55); color: rgba(245, 245, 247, .9); }\n\n/* Scrubber: played (gold), buffered, remaining track; the knob and bubble ride a full-width wrapper moved by transform. */\n#mbptv-player .mbp-scrub { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 3em; }\n#mbptv-player .mbp-state { position: relative; width: 2.1em; height: 2.1em; margin-right: 1.25em; color: #f5f5f7; }\n#mbptv-player .mbp-state .mbp-ico { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv-player .mbp-state .mbp-state-play { display: none; }\n#mbptv-player.is-paused .mbp-state .mbp-state-play { display: block; }\n#mbptv-player.is-paused .mbp-state .mbp-state-pause { display: none; }\n#mbptv-player .mbp-time { font-size: 1.375em; font-weight: 600; white-space: nowrap; letter-spacing: .01em; min-width: 3.1em; }\n#mbptv-player.is-long .mbp-time { min-width: 4.2em; }\n#mbptv-player .mbp-elapsed { margin-right: .9em; color: #f5f5f7; }\n#mbptv-player .mbp-remain { margin-left: .9em; text-align: right; color: rgba(245, 245, 247, .72); }\n#mbptv-player .mbp-bar {\n  position: relative; -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; height: .5em;\n  -webkit-transform: scaleY(.7); transform: scaleY(.7);\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-scrub .mbp-bar { -webkit-transform: scaleY(1); transform: scaleY(1); }\n#mbptv-player .mbp-bar-clip { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: .25em; overflow: hidden; background: rgba(255, 255, 255, .22); }\n#mbptv-player .mbp-buf, #mbptv-player .mbp-fill {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%;\n  -webkit-transform-origin: 0 50%; transform-origin: 0 50%; -webkit-transform: scaleX(0); transform: scaleX(0);\n}\n#mbptv-player .mbp-buf { background: rgba(255, 255, 255, .3); }\n#mbptv-player .mbp-fill { background: #e7bd68; }\n#mbptv-player .mbp-headwrap { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }\n#mbptv-player .mbp-knob {\n  position: absolute; left: -.9em; top: 50%; width: 1.8em; height: 1.8em; margin-top: -.9em; border-radius: 50%; background: #fff;\n  opacity: 0; -webkit-transform: scale(.4); transform: scale(.4);\n  -webkit-transition: opacity .15s ease-out, -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: opacity .15s ease-out, transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-scrub .mbp-knob { opacity: 1; -webkit-transform: scale(.78); transform: scale(.78); }\n#mbptv-player.is-seeking .mbp-knob { opacity: 1; -webkit-transform: scale(1); transform: scale(1); }\n#mbptv-player .mbp-bubble {\n  position: absolute; left: 0; bottom: 2.4em; text-align: center; white-space: nowrap; opacity: 0;\n  -webkit-transform: translate3d(-50%, .5em, 0); transform: translate3d(-50%, .5em, 0);\n  -webkit-transition: opacity .15s ease-out, -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: opacity .15s ease-out, transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-seeking .mbp-bubble { opacity: 1; -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0); }\n#mbptv-player .mbp-bubble-delta { display: inline-block; margin-bottom: .4em; font-size: 1.375em; font-weight: 800; letter-spacing: .01em; color: #e7bd68; }\n#mbptv-player .mbp-bubble-time {\n  display: block; padding: .3em .75em; border-radius: .45em; background: #f5f5f7; color: #07070a;\n  font-size: 1.75em; line-height: 1.2; font-weight: 800; letter-spacing: .01em;\n}\n\n/* Buttons row: pills that turn solid white when focused (the shell's button language). */\n#mbptv-player .mbp-btns { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 4.5em; margin-top: 1.4em; }\n#mbptv-player .mbp-btn {\n  position: relative; overflow: hidden;\n  display: -webkit-inline-box; display: -webkit-inline-flex; display: inline-flex; -webkit-align-items: center; align-items: center;\n  height: 3.5em; padding: 0 1.6em 0 1.3em; margin-right: 1em; border-radius: 2em; white-space: nowrap;\n  background: rgba(255, 255, 255, .12); color: rgba(245, 245, 247, .9);\n  -webkit-transition: -webkit-transform .18s cubic-bezier(.2, .8, .2, 1); transition: transform .18s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-btn .mbp-ico { position: relative; width: 1.45em; height: 1.45em; margin-right: .6em; }\n#mbptv-player .mbp-btn-label { position: relative; font-size: 1.3125em; font-weight: 600; line-height: 1; letter-spacing: .005em; }\n#mbptv-player .mbp-btn-value { position: relative; margin-left: .5em; font-size: 1.3125em; font-weight: 500; line-height: 1; opacity: .62; }\n#mbptv-player .mbp-btn.is-focused { background: #f5f5f7; color: #07070a; -webkit-transform: scale(1.06); transform: scale(1.06); }\n#mbptv-player.is-scrub .mbp-btns .mbp-btn { background: rgba(255, 255, 255, .09); color: rgba(245, 245, 247, .66); }\n\n/* ---------- Skip Intro (floating, focused while the controls are hidden) ---------- */\n#mbptv-player .mbp-skip {\n  position: absolute; right: 7em; bottom: 6.5em; z-index: 11;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;\n  height: 3.75em; padding: 0 1.9em 0 1.5em; border-radius: 2em; background: rgba(20, 20, 26, .82); color: #f5f5f7;\n  opacity: 0; visibility: hidden; -webkit-transform: translate3d(0, 1em, 0); transform: translate3d(0, 1em, 0);\n  -webkit-transition: opacity .25s ease-out, -webkit-transform .25s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .25s;\n  transition: opacity .25s ease-out, transform .25s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .25s;\n}\n#mbptv-player .mbp-skip.is-on {\n  opacity: 1; visibility: visible; -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0);\n  -webkit-transition: opacity .25s ease-out, -webkit-transform .25s cubic-bezier(.2, .8, .2, 1); transition: opacity .25s ease-out, transform .25s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-skip.is-focused { background: #f5f5f7; color: #07070a; box-shadow: 0 .8em 2em rgba(0, 0, 0, .45); }\n#mbptv-player .mbp-skip .mbp-ico { width: 1.5em; height: 1.5em; margin-right: .65em; }\n#mbptv-player .mbp-skip-label { font-size: 1.375em; font-weight: 700; line-height: 1; }\n\n/* ---------- Chip (resume notice, quality switched, hints) ---------- */\n#mbptv-player .mbp-chip {\n  position: absolute; left: 50%; top: 2.55em; z-index: 12; max-width: 58em; padding: .75em 1.45em; border-radius: 2em;\n  background: rgba(28, 28, 35, .94); color: #f5f5f7; font-size: 1.375em; font-weight: 600; line-height: 1.3;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  opacity: 0; visibility: hidden; -webkit-transform: translate3d(-50%, -.8em, 0); transform: translate3d(-50%, -.8em, 0);\n  -webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out, visibility 0s linear .2s;\n  transition: opacity .2s ease-out, transform .2s ease-out, visibility 0s linear .2s;\n}\n#mbptv-player .mbp-chip.is-on {\n  opacity: 1; visibility: visible; -webkit-transform: translate3d(-50%, 0, 0); transform: translate3d(-50%, 0, 0);\n  -webkit-transition: opacity .2s ease-out, -webkit-transform .2s ease-out; transition: opacity .2s ease-out, transform .2s ease-out;\n}\n\n/* ---------- Up Next ---------- */\n#mbptv-player .mbp-un-scrim {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 12; opacity: 0; visibility: hidden; pointer-events: none;\n  background: -webkit-radial-gradient(100% 100%, ellipse farthest-corner, rgba(0, 0, 0, .82) 0%, rgba(0, 0, 0, .5) 30%, rgba(0, 0, 0, 0) 62%);\n  background: radial-gradient(ellipse farthest-corner at 100% 100%, rgba(0, 0, 0, .82) 0%, rgba(0, 0, 0, .5) 30%, rgba(0, 0, 0, 0) 62%);\n  -webkit-transition: opacity .35s ease-out, visibility 0s linear .35s; transition: opacity .35s ease-out, visibility 0s linear .35s;\n}\n#mbptv-player.is-upnext .mbp-un-scrim { opacity: 1; visibility: visible; -webkit-transition: opacity .35s ease-out; transition: opacity .35s ease-out; }\n#mbptv-player .mbp-upnext {\n  position: absolute; right: 7em; bottom: 5.5em; z-index: 13; width: 48em; padding: 1.25em; border-radius: 1.1em;\n  background: rgba(28, 28, 35, .97); opacity: 0; visibility: hidden;\n  -webkit-transform: translate3d(0, 1.5em, 0); transform: translate3d(0, 1.5em, 0);\n  -webkit-transition: opacity .3s ease-out, -webkit-transform .35s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .35s;\n  transition: opacity .3s ease-out, transform .35s cubic-bezier(.2, .8, .2, 1), visibility 0s linear .35s;\n}\n#mbptv-player.is-upnext .mbp-upnext {\n  opacity: 1; visibility: visible; -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0);\n  -webkit-transition: opacity .3s ease-out, -webkit-transform .35s cubic-bezier(.2, .8, .2, 1); transition: opacity .3s ease-out, transform .35s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-un-top { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: flex-start; align-items: flex-start; }\n#mbptv-player .mbp-un-still {\n  position: relative; width: 20em; height: 11.25em; border-radius: .65em; overflow: hidden; -webkit-flex-shrink: 0; flex-shrink: 0;\n  background: #131318;\n  background: -webkit-linear-gradient(top, #1d1d25 0%, #131318 100%);\n  background: linear-gradient(to bottom, #1d1d25 0%, #131318 100%);\n}\n#mbptv-player .mbp-un-ph { position: absolute; left: 0; top: 0; width: 100%; height: 100%; text-align: center; font-size: 2.5em; line-height: 4.5em; font-weight: 800; color: rgba(245, 245, 247, .3); }\n#mbptv-player .mbp-un-img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out; }\n#mbptv-player .mbp-un-img.is-loaded { opacity: 1; }\n#mbptv-player .mbp-un-glyph {\n  position: absolute; left: 50%; top: 50%; width: 3.6em; height: 3.6em; margin: -1.8em 0 0 -1.8em; border-radius: 50%;\n  background: rgba(7, 7, 10, .55); color: #f5f5f7;\n}\n#mbptv-player .mbp-un-glyph .mbp-ico { position: absolute; left: 1.05em; top: .9em; width: 1.8em; height: 1.8em; }\n#mbptv-player .mbp-un-text { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 0; margin-left: 1.5em; padding-top: .2em; }\n#mbptv-player .mbp-un-count { margin-bottom: .4em; font-size: 1.25em; letter-spacing: .1em; }\n#mbptv-player .mbp-un-title { font-size: 1.75em; line-height: 1.2; font-weight: 700; color: #f5f5f7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-un-meta { margin-top: .3em; font-size: 1.1875em; font-weight: 600; letter-spacing: .02em; color: rgba(245, 245, 247, .56); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-un-btns { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-top: 1.05em; }\n#mbptv-player .mbp-un-btns .mbp-btn { height: 3.25em; margin-right: .8em; }\n#mbptv-player .mbp-btn-fill {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, .16);\n  -webkit-transform-origin: 0 50%; transform-origin: 0 50%; -webkit-transform: scaleX(0); transform: scaleX(0);\n}\n#mbptv-player .mbp-btn-fill.is-running { -webkit-transition: -webkit-transform 1s linear; transition: transform 1s linear; }\n#mbptv-player .mbp-btn.is-focused .mbp-btn-fill { background: rgba(231, 189, 104, .55); }\n\n/* ---------- Quality sheet ---------- */\n#mbptv-player .mbp-sheet-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 20; visibility: hidden; -webkit-transition: visibility 0s linear .3s; transition: visibility 0s linear .3s; }\n#mbptv-player.is-sheet .mbp-sheet-layer { visibility: visible; -webkit-transition: none; transition: none; }\n#mbptv-player .mbp-sheet-dim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, .6); opacity: 0; -webkit-transition: opacity .25s ease-out; transition: opacity .25s ease-out; }\n#mbptv-player.is-sheet .mbp-sheet-dim { opacity: 1; }\n#mbptv-player .mbp-sheet {\n  position: absolute; right: 0; top: 0; bottom: 0; width: 42em; padding: 4.5em 3.5em 3em; background: #131318;\n  -webkit-transform: translate3d(100%, 0, 0); transform: translate3d(100%, 0, 0);\n  -webkit-transition: -webkit-transform .28s cubic-bezier(.2, .8, .2, 1); transition: transform .28s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player.is-sheet .mbp-sheet { -webkit-transform: translate3d(0, 0, 0); transform: translate3d(0, 0, 0); }\n#mbptv-player .mbp-sheet .mbp-kicker { margin-bottom: .6em; }\n#mbptv-player .mbp-sheet-title { font-size: 2.25em; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; color: #f5f5f7; margin-bottom: .35em; }\n#mbptv-player .mbp-sheet-sub { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .46); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-sheet-port { position: absolute; left: 2.5em; right: 2.5em; top: 13.25em; bottom: 6.5em; overflow: hidden; }\n#mbptv-player .mbp-sheet-list { padding: .75em 1em; -webkit-transition: -webkit-transform .22s ease-out; transition: transform .22s ease-out; }\n#mbptv-player .mbp-sheet-label { margin: 1.4em 0 .8em .15em; font-size: 1.0625em; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: rgba(245, 245, 247, .46); }\n#mbptv-player .mbp-opt {\n  position: relative; min-height: 4.75em; margin-bottom: .6em; padding: .95em 4.25em .95em 1.5em; border-radius: .8em;\n  background: rgba(255, 255, 255, .05); color: #f5f5f7;\n  -webkit-transition: -webkit-transform .15s cubic-bezier(.2, .8, .2, 1); transition: transform .15s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-opt-label { font-size: 1.5em; line-height: 1.25; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-opt-meta { margin-top: .2em; font-size: 1.125em; line-height: 1.3; font-weight: 500; color: rgba(245, 245, 247, .5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n#mbptv-player .mbp-opt .mbp-opt-check { position: absolute; right: 1.35em; top: 50%; width: 1.75em; height: 1.75em; margin-top: -.875em; color: #35c46a; display: none; }\n#mbptv-player .mbp-opt.is-current .mbp-opt-check { display: block; }\n#mbptv-player .mbp-opt.is-focused { background: #f5f5f7; color: #07070a; -webkit-transform: scale(1.02); transform: scale(1.02); }\n#mbptv-player .mbp-opt.is-focused .mbp-opt-meta { color: rgba(7, 7, 10, .6); }\n#mbptv-player .mbp-opt.is-focused .mbp-opt-check { color: #1f8a46; }\n#mbptv-player .mbp-sheet-hint { position: absolute; left: 3.5em; bottom: 2.6em; font-size: 1.125em; font-weight: 500; color: rgba(245, 245, 247, .5); white-space: nowrap; }\n#mbptv-player .mbp-hint-gap { margin-right: 1.6em; }\n\n/* ---------- Error card ---------- */\n#mbptv-player .mbp-error { position: absolute; left: 0; top: 0; width: 100%; height: 100%; z-index: 30; display: none; background: rgba(0, 0, 0, .25); }\n#mbptv-player[data-state=\"error\"] .mbp-error { display: block; -webkit-animation: mbpFade .2s ease-out; animation: mbpFade .2s ease-out; }\n#mbptv-player .mbp-err-card {\n  position: absolute; left: 50%; top: 50%; width: 58em; margin-left: -29em; padding: 3.5em 4em 3.25em; border-radius: 1.25em;\n  background: rgba(28, 28, 35, .97); text-align: center;\n  -webkit-transform: translate3d(0, -50%, 0); transform: translate3d(0, -50%, 0);\n  -webkit-animation: mbpPop .24s cubic-bezier(.2, .8, .2, 1); animation: mbpPop .24s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv-player .mbp-err-ico { display: block; width: 4em; height: 4em; margin: 0 auto 1.4em; color: #e7bd68; }\n#mbptv-player .mbp-err-kicker { margin-bottom: .75em; text-align: center; color: rgba(245, 245, 247, .56); }\n#mbptv-player .mbp-err-title { font-size: 2.5em; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; color: #f5f5f7; margin-bottom: .5em; text-align: center; }\n#mbptv-player .mbp-err-body { max-width: 32em; margin: 0 auto 1em; font-size: 1.5em; line-height: 1.45; color: rgba(245, 245, 247, .72); text-align: center; }\n#mbptv-player .mbp-err-code { margin-bottom: 2.3em; font-size: 1.0625em; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgba(245, 245, 247, .56); text-align: center; }\n#mbptv-player .mbp-err-code.is-empty { margin-bottom: 1.3em; }\n#mbptv-player .mbp-err-btns { display: -webkit-box; display: -webkit-flex; display: flex; -webkit-justify-content: center; justify-content: center; -webkit-align-items: center; align-items: center; }\n#mbptv-player .mbp-err-btns .mbp-btn { height: 3.75em; margin: 0 .5em; padding: 0 1.8em 0 1.5em; }\n\n/* Reduce motion (#mbptv.mb-reduce stills every transition and animation): keep the spinners turning. */\n#mbptv.mb-reduce #mbptv-player .mbp-spin-ring { -webkit-animation: mbpSpin 1.2s linear infinite !important; animation: mbpSpin 1.2s linear infinite !important; }\n\n/* Screen additions (0.3.1), built after shell.css (tools/build.cjs) with the same tokens and rules: scoped under\n   #mbptv, em units (1em = 18px at 1080p), Chromium 47 safe (flexbox, margins, prefixed transforms).\n   Detail episodes: the season line, the loading state of a season switch, watched marks, the Continue Watching\n   progress and name-only episode cards. Settings: the list scrolls when it is taller than the screen. */\n\n/* \"Season 2 · 13 episodes · [bar] 2 of 13 watched\", above the episodes and aligned with the first card. */\n#mbptv .mb-season-info {\n  height: 2.2em; margin: 0 5em .55em 9em; white-space: nowrap; overflow: hidden;\n  display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;\n}\n#mbptv .mb-season-name { font-size: 1.5em; font-weight: 700; color: #f5f5f7; }\n#mbptv .mb-season-count { margin-left: .9em; font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .6); }\n#mbptv .mb-season-watched {\n  margin-left: 1.6em; display: -webkit-box; display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center;\n}\n#mbptv .mb-season-watched .mb-progress { width: 6.5em; margin-right: .75em; }\n#mbptv .mb-season-watched-text { font-size: 1.25em; font-weight: 500; color: rgba(245, 245, 247, .72); }\n\n/* A season that is loading: the previous episodes stay, dimmed, under a spinner. */\n#mbptv .mb-row--episodes .mb-track {\n  -webkit-transition: -webkit-transform .26s cubic-bezier(.2, .8, .2, 1), opacity .2s ease-out;\n  transition: transform .26s cubic-bezier(.2, .8, .2, 1), opacity .2s ease-out;\n}\n#mbptv .mb-row--episodes.is-loading .mb-track { opacity: .3; }\n#mbptv .mb-ep-spinner { position: absolute; left: 50%; top: 5.45em; margin-left: -1.75em; display: none; z-index: 2; }\n#mbptv .mb-row--episodes.is-loading .mb-ep-spinner { display: block; }\n\n/* Watched: a check at the top right of the picture. */\n#mbptv .mb-ep-check {\n  position: absolute; right: .7em; top: .7em; width: 2.1em; height: 2.1em; border-radius: 50%;\n  background: rgba(7, 7, 10, .78); color: #35c46a; display: none;\n}\n#mbptv .mb-ep-check .mb-ico { position: absolute; left: .3em; top: .3em; width: 1.5em; height: 1.5em; }\n#mbptv .mb-episode.is-watched .mb-ep-check { display: block; }\n\n/* The Continue Watching episode: a progress bar along the bottom edge of the picture. */\n#mbptv .mb-ep-progress { position: absolute; left: 0; right: 0; bottom: 0; }\n#mbptv .mb-ep-progress .mb-progress { height: .35em; border-radius: 0; background: rgba(255, 255, 255, .28); }\n#mbptv .mb-ep-progress .mb-progress-fill { border-radius: 0; }\n\n/* An episode the site lists by name only: a deliberate text card (code, title, a large faint number). */\n#mbptv .mb-ep-text {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; padding: 1.15em 1.3em; overflow: hidden; white-space: normal;\n  background: #1a1a21;\n  background: -webkit-linear-gradient(top, #23232b 0%, #15151b 100%);\n  background: linear-gradient(to bottom, #23232b 0%, #15151b 100%);\n}\n#mbptv .mb-ep-text-code { position: relative; font-size: 1.0625em; font-weight: 800; letter-spacing: .06em; color: #e7bd68; white-space: nowrap; }\n#mbptv .mb-ep-text-title {\n  position: relative; margin-top: .5em; max-width: 11.5em; max-height: 3.75em; font-size: 1.5em; line-height: 1.25; font-weight: 700; color: #f5f5f7;\n  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;\n}\n#mbptv .mb-ep-text-num {\n  position: absolute; right: .12em; bottom: -.12em; font-size: 7em; line-height: 1; font-weight: 800; letter-spacing: -.04em;\n  color: rgba(245, 245, 247, .07);\n}\n#mbptv .mb-episode--text.is-focused .mb-ep-text { background: #2a2a33; }\n/* The focused text card's play button sits bottom left, clear of the title. */\n#mbptv .mb-episode--text .mb-ep-play { left: 1.3em; top: auto; bottom: 1.1em; margin: 0; }\n\n/* Performance mode: no fades on the rows. */\n#mbptv.mb-perf .mb-row--episodes .mb-track { -webkit-transition: -webkit-transform .2s cubic-bezier(.2, .8, .2, 1); transition: transform .2s cubic-bezier(.2, .8, .2, 1); }\n\n/* ---------- Settings: a list taller than the screen scrolls (by transform) inside this port ---------- */\n#mbptv .mb-settings-port { position: absolute; left: -1.5em; top: 0; width: 61em; bottom: 2.5em; overflow: hidden; }\n#mbptv .mb-settings-port .mb-list {\n  margin: 0 0 0 1.5em; padding-bottom: 1em;\n  -webkit-transition: -webkit-transform .22s cubic-bezier(.2, .8, .2, 1); transition: transform .22s cubic-bezier(.2, .8, .2, 1);\n}\n#mbptv.mb-perf .mb-settings-port .mb-list { -webkit-transition: none; transition: none; }\n\n/* Search and filters (0.4.2), built after screens.css with the same tokens and rules: scoped under #mbptv, em units\n   (1em = 18px at 1080p), Chromium 47 safe. Movies / TV Shows: the filter bar and the filter sheet. Search: the type\n   tabs above every view (All / Movies / TV Shows / People), the scrolling discover view with its browse chips, and\n   round person cards. Browse: a person's picture beside their name. */\n\n/* ---------- Browse: filter bar ---------- */\n#mbptv .mb-filter-bar { padding: 0 5em 0 9em; margin-bottom: .6em; -webkit-flex-wrap: wrap; flex-wrap: wrap; }\n#mbptv .mb-filter-bar .mb-btn { margin-bottom: .875em; height: 3.25em; padding: 0 1.6em; }\n#mbptv .mb-filter-bar .mb-btn-label { font-size: 1.25em; }\n#mbptv .mb-filter-bar .mb-btn .mb-btn-ico { width: 1.35em; height: 1.35em; }\n#mbptv .mb-filter-bar .mb-chip { margin-right: .75em; }\n#mbptv .mb-filter-bar.is-off .mb-filter-pill { opacity: .45; }\n#mbptv .mb-filter-pill.is-focused { opacity: 1; }\n\n/* A person's picture beside their name (Browse for a person). */\n#mbptv .mb-browse-head.has-avatar { position: relative; padding-left: 17.5em; min-height: 7em; }\n#mbptv .mb-browse-avatar { position: absolute; left: 9em; top: 3.5em; width: 7em; height: 7em; border-radius: 50%; overflow: hidden; background: #1c1c23; }\n\n/* ---------- Filter sheet ---------- */\n#mbptv .mb-sheet.mb-sheet--filters { width: 68em; }\n#mbptv .mb-sheet--filters .mb-sheet-sub { white-space: normal; height: 1.4em; color: #e7bd68; }\n#mbptv .mb-sheet--filters .mb-sheet-port { top: 12.5em; bottom: 5.5em; left: 2.5em; right: 2em; }\n#mbptv .mb-sheet--filters .mb-sheet-list { padding: 1em 1em 4em; }\n#mbptv .mb-filter-acts { margin-bottom: .4em; }\n#mbptv .mb-filter-label { margin: 1.4em 0 .8em .15em; }\n#mbptv .mb-filter-note { margin-left: 1em; letter-spacing: 0; text-transform: none; font-weight: 500; color: rgba(245, 245, 247, .45); }\n#mbptv .mb-filter-group .mb-chip { margin: 0 .75em .75em 0; }\n\n/* ---------- Search: tabs in every view, discover scrolls ---------- */\n#mbptv .mb-search .mb-suggest-box { top: 10em; }\n#mbptv .mb-discover-port { position: absolute; left: -1.5em; right: 0; top: 10em; bottom: 0; overflow: hidden; }\n#mbptv .mb-discover-port .mb-discover { padding: .35em 0 6em 1.5em; -webkit-transition: -webkit-transform .3s cubic-bezier(.2, .8, .2, 1); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }\n#mbptv .mb-discover .mb-chiprow { margin-bottom: 1.6em; }\n\n/* ---------- Person cards (People results) ---------- */\n#mbptv .mb-card--person { width: 12em; text-align: center; }\n#mbptv .mb-card--person .mb-card-art { height: 12em; border-radius: 50%; background: #1c1c23; }\n#mbptv .mb-person-initials {\n  position: absolute; left: 0; top: 0; width: 100%; height: 100%; line-height: 3.75em; text-align: center;\n  font-size: 3.2em; font-weight: 700; color: rgba(245, 245, 247, .45);\n}\n#mbptv .mb-card--person .mb-card-title { white-space: normal; max-height: 2.6em; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }\n#mbptv .mb-card--person .mb-card-sub { height: auto; white-space: normal; line-height: 1.3; }\n#mbptv .mb-card-star--first { margin-left: 0; }\n";
 /* ---- 00-core.js ---- */
 /* Core utilities shared by every module. ES5 only; nothing here touches the DOM at load time. */
 var U = (function () {
@@ -1134,13 +1134,15 @@ var Site = (function () {
     var out = { title: '', items: [], next: '', chips: [] };
     if (!doc || !doc.documentElement) return out;
     var base = baseOf(doc, url);
-    var head = qs(doc, 'span[style*="font-size:24px"], span[style*="font-size: 24px"]') || qs(doc, '.contents h1, .contents h2');
+    var head = qs(doc, 'span[style*="font-size:24px"], span[style*="font-size: 24px"]') || qs(doc, '.filmmaker > .name') || qs(doc, '.contents h1, .contents h2');
     out.title = textOf(head) || docTitle(doc);
     var scope = qs(doc, '.contents') || doc;
     out.items = cards(scope, { base: base });
     if (!out.items.length && scope !== doc) out.items = cards(doc, { base: base });
     out.next = nextFrom(doc, base);
     out.chips = chipsFrom(doc, base);
+    var f = filters(doc, base);
+    if (f) out.filters = f;
     return out;
   }
 
@@ -1166,6 +1168,8 @@ var Site = (function () {
     if (!selected) U.each(out.types, function (t) { t.selected = t.type === out.type; });
     var roots = U.filter(qsa(doc, '.search_info > a[href]'), function (a) { return !!targetInfo(a, base); });
     out.items = dedupe(U.map(roots, function (a) { return itemFrom(a, base); }));
+    var mobile = !out.items.length ? mobileResults(doc, base) : [];
+    if (mobile.length) out.items = mobile;
     if (!out.items.length) out.items = cards(qs(doc, '.search_info') || qs(doc, '.result') || doc, { base: base });
     var pls = qsa(doc, '.playlists a[href*="/playlist/"]');
     if (!pls.length) pls = U.filter(qsa(doc, 'a[href*="/playlist/"]'), function (a) { return !!qs(a, '.name, .list_img'); });
@@ -1182,7 +1186,204 @@ var Site = (function () {
       });
     });
     out.next = nextFrom(doc, base);
+    /* The mobile layout has no pagination links (the site's script asks for more pages as it scrolls); the same URL
+       with page=N+1 answers the next 15 results, and the type filter applies there too. */
+    if (!out.next && mobile.length >= MOBILE_SEARCH_PAGE) out.next = searchHref(out.query, out.type, Math.max(1, toInt(u.query.page) || 1) + 1);
     out.empty = out.items.length === 0;
+    return out;
+  }
+
+  /* Mobile search layout (served to TV user agents, seen live 2026-10-20): `.section2 li > a[href=/movie|tvshow/ID]`
+     holding the poster `i img`, `span.title` ("The Batman <span.grey>(2022)</span>"), `span.year` ("176 min  ACTION,
+     CRIME"), `span.time` (the IMDb rating) and the overview. 15 results per page, no result count, no type tabs. */
+  var MOBILE_SEARCH_PAGE = 15;
+  function directText(el) {
+    var out = '';
+    U.each(el ? el.childNodes : [], function (n) { if (n.nodeType === 3) out += n.nodeValue; });
+    return U.text(out);
+  }
+
+  function mobileResults(doc, base) {
+    var out = [];
+    U.each(qsa(doc, '.section2 li a[href]'), function (a) {
+      var t = targetInfo(a, base);
+      if (!t || t.p.play) return;
+      var item = blankItem(t.p.kind, t.p.id, base);
+      var titleEl = qs(a, '.title');
+      item.title = directText(titleEl) || textOf(titleEl) || U.text(attr(a, 'title'));
+      item.year = yearOf(textOf(qs(titleEl, '.grey')));
+      item.poster = posterFor(a, base);
+      var facts = textOf(qs(a, '.year'));
+      item.runtime = normRuntime(facts);
+      var genres = U.text(facts.replace(/\d+\s*(?:min|mins|minutes?)\b/i, ''));
+      if (genres && isGenreList(genres)) item.genres = splitGenres(genres);
+      item.rating = normRating(textOf(qs(a, '.time')));
+      item.badge = badgeFor(a);
+      out.push(item);
+    });
+    return dedupe(out);
+  }
+
+  /* ---------- Movies / TV Shows filters (section 3: the list pages' own filter panel) ---------- */
+
+  /* The site's filter panel (`.screenbg-filter .screencon`, one `[data-name]` group per filter, `.elect` options with
+     a `query` attribute, `.elected` = applied) builds `/movie?sort=&tomato_meter=&rating=&quality=&year=&genr=&country=`
+     (`/tvshow?...` for shows). The server reads each parameter (empty ones may be left out); genres join with "-",
+     countries with ",". The FILTER_* lists are the fallback when a page carries no panel (captured live 2026-10-20). */
+  var FILTER_ORDER = ['sort', 'genr', 'year', 'tomato_meter', 'quality', 'rating', 'country'];
+  var FILTER_MULTI = { genr: true, country: true };
+  var FILTER_TITLES = { sort: 'Sort by', genr: 'Genre', year: 'Year', tomato_meter: 'Rotten Tomatoes', quality: 'Quality', rating: 'Age rating', country: 'Country' };
+  var SORT_LABELS = { add: 'Recently added', rating: 'IMDb rating', tomato_meter: 'Rotten Tomatoes', view: 'Most watched', released: 'Release date' };
+  var QUALITY_LABELS = { 'BLU-RAY': 'Blu-ray', WEBDL: 'WEB-DL', TC: 'TC' };
+  var GENRES = [['1', 'Action'], ['2', 'Adventure'], ['3', 'Animation'], ['4', 'Biography'], ['5', 'Comedy'], ['6', 'Crime'],
+    ['7', 'Documentary'], ['8', 'Drama'], ['9', 'Family'], ['10', 'Fantasy'], ['11', 'Film-Noir'], ['12', 'History'], ['13', 'Horror'],
+    ['14', 'Music'], ['15', 'Mystery'], ['16', 'Romance'], ['17', 'Sci-Fi'], ['18', 'Sport'], ['19', 'Thriller'], ['20', 'War'],
+    ['21', 'Western'], ['22', 'Christmas'], ['24', 'Reality-TV'], ['45', 'News'], ['51', 'Game-Show'], ['52', 'Talk-Show'], ['53', 'Short']];
+  var YEARS = ['2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2010-2015', '2000-2009',
+    '1990-1999', '1980-1989', '1970-1979', '1960-1969', 'Before 1960'];
+  var COUNTRIES = ['United States', 'United Kingdom', 'Canada', 'France', 'India', 'Japan', 'Germany', 'Italy', 'Spain', 'China',
+    'Australia', 'South Korea', 'Hong Kong', 'Russia', 'Mexico', 'Belgium', 'Sweden', 'Ireland', 'Netherlands', 'Brazil', 'Poland',
+    'Denmark', 'Argentina', 'Turkey', 'Czech Republic', 'Switzerland', 'Taiwan', 'South Africa', 'Romania', 'Norway', 'Philippines',
+    'Thailand', 'New Zealand', 'Austria', 'Israel', 'Hungary', 'Indonesia', 'Finland', 'Nigeria', 'Chile', 'Portugal', 'Iran',
+    'Colombia', 'Greece'];
+  var MAX_FILTER_OPTIONS = 60, MAX_COUNTRIES = 40;
+
+  function opt(value, label) { return { value: String(value), label: String(label) }; }
+
+  function filterLabel(name, value, text) {
+    var t = U.text(text || value);
+    if (name === 'sort') return SORT_LABELS[value] || U.titleCase(t);
+    if (name === 'quality') return QUALITY_LABELS[value] || (/^[A-Z0-9]{1,5}$/.test(t) ? t : U.titleCase(t));
+    if (name === 'tomato_meter' || name === 'genr') return U.titleCase(t.replace(/-(?=FRESH)/i, ' '));
+    return t;
+  }
+
+  function emptyFilters() { return { sort: '', genr: [], year: '', tomato_meter: '', quality: '', rating: '', country: [] }; }
+
+  function filterSpec(kind) {
+    var tv = kindOf(kind) === 'tv';
+    var lists = {
+      sort: tv ? ['rating', 'tomato_meter', 'view'] : ['add', 'rating', 'tomato_meter', 'view'],
+      genr: GENRES,
+      year: YEARS,
+      tomato_meter: tv ? ['FRESH', 'Rotten'] : ['CERTIFIED-FRESH', 'FRESH', 'Rotten'],
+      quality: ['4K', 'BLU-RAY', 'WEBDL', 'HDTV', 'DVD', 'TC'],
+      rating: tv ? ['TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA'] : ['G', 'PG', 'PG-13', 'R', 'NC-17'],
+      country: COUNTRIES
+    };
+    var groups = U.map(FILTER_ORDER, function (name) {
+      return { name: name, title: FILTER_TITLES[name], multi: !!FILTER_MULTI[name], options: U.map(lists[name], function (v) {
+        return isArray(v) ? opt(v[0], v[1]) : opt(v, filterLabel(name, v, v.replace(/-(?=FRESH)/, ' ')));
+      }) };
+    });
+    return { kind: tv ? 'tv' : 'movie', groups: groups, selected: emptyFilters(), live: false };
+  }
+
+  /* {kind, groups: [{name, title, multi, options: [{value, label}]}], selected: {sort, genr: [], ...}, live: true}
+     from a list page's own panel (groups the page lacks come from the fallback lists), or null without a panel.
+     kind: 'tv' on /tvshow (or a panel titled "TV RATINGS"), else 'movie'. */
+  function filters(doc, url) {
+    if (!doc || !doc.documentElement) return null;
+    var panel = qs(doc, '.screenbg-filter .screencon') || qs(doc, '.screencon');
+    if (!panel || !qs(panel, '[data-name] .elect, [data-name] .elected')) return null;
+    var path = U.parseUrl(baseOf(doc, url)).pathname || '';
+    var k = /^\/tvshow\b/.test(path) || /\btv\s+ratings\b/i.test(textOf(qs(panel, '.movie_ratings .title'))) ? 'tv' : 'movie';
+    var spec = filterSpec(k), byName = {};
+    var out = { kind: k, groups: [], selected: emptyFilters(), live: true };
+    U.each(qsa(panel, '[data-name]'), function (box) {
+      var name = attr(box, 'data-name');
+      if (U.indexOf(FILTER_ORDER, name) < 0 || byName[name]) return;
+      var options = [], seen = {};
+      U.each(qsa(box, '.elect, .elected'), function (o) {
+        var text = U.text(textOf(o)), value;
+        if (name === 'year') value = text;
+        else if (name === 'country') {
+          /* Named flags only: the panel also lists codes and places ("IN", "Utah") as text badges. */
+          if (o.tagName !== 'IMG') return;
+          value = text = U.text(attr(o, 'title'));
+        } else value = U.text(attr(o, 'query'));
+        if (!value || seen['$' + value]) return;
+        seen['$' + value] = true;
+        if (U.hasClass(o, 'elected')) {
+          if (FILTER_MULTI[name]) out.selected[name].push(value);
+          else if (!(name === 'sort' && value === 'add')) out.selected[name] = value;
+        }
+        if (options.length < MAX_FILTER_OPTIONS) options.push(opt(value, filterLabel(name, value, text)));
+      });
+      if (name === 'country') options = options.slice(0, MAX_COUNTRIES);
+      /* The panel lists qualities from worst to best; the TV lists the best first. */
+      if (name === 'quality') options.reverse();
+      if (options.length) byName[name] = { name: name, title: FILTER_TITLES[name], multi: !!FILTER_MULTI[name], options: options };
+    });
+    U.each(spec.groups, function (g) { out.groups.push(byName[g.name] || g); });
+    return out;
+  }
+
+  /* A filter state with every field present and only well-formed values (sessionStorage and old params survive). */
+  function normFilters(f) {
+    var out = emptyFilters();
+    if (!f || typeof f !== 'object') return out;
+    U.each(FILTER_ORDER, function (name) {
+      var v = f[name];
+      if (FILTER_MULTI[name]) {
+        var list = isArray(v) ? v : (typeof v === 'string' && v ? v.split(name === 'genr' ? '-' : ',') : []);
+        out[name] = uniqStrings(U.map(list, function (x) { return typeof x === 'string' || typeof x === 'number' ? U.text(String(x)) : ''; }), 40);
+      } else out[name] = typeof v === 'string' || typeof v === 'number' ? U.text(String(v)).slice(0, 60) : '';
+    });
+    if (out.sort === 'add') out.sort = '';
+    return out;
+  }
+
+  /* The list URL for a filter state: /movie or /tvshow plus only the parameters that are set (the bare path when none,
+     so it is the same page, and cache entry, as the rail's Movies). */
+  function browseUrl(kind, f, page) {
+    f = normFilters(f);
+    var parts = [];
+    U.each(FILTER_ORDER, function (name) {
+      var v = f[name];
+      if (FILTER_MULTI[name]) { if (v.length) parts.push(name + '=' + U.map(v, enc).join(name === 'genr' ? '-' : ',')); }
+      else if (v) parts.push(name + '=' + enc(v));
+    });
+    if (toInt(page) > 1) parts.push('page=' + toInt(page));
+    return siteOrigin() + (kindOf(kind) === 'tv' ? '/tvshow' : '/movie') + (parts.length ? '?' + parts.join('&') : '');
+  }
+
+  /* ---------- People (the website's own actor search and actor pages) ---------- */
+
+  function personId(href, base) {
+    var abs = sameSiteUrl(href, base);
+    var m = abs ? /^\/actor\/(\d+)$/.exec(U.parseUrl(abs).pathname || '') : null;
+    return m ? m[1] : '';
+  }
+
+  /* The website's actor search answers {code: 1, data: {list: HTML}} (POST /index/search/search?key=Q with
+     key, page, type=actor and ajax=1: the request its own script makes); each `a[href=/actor/ID]` holds `.avatar`
+     (a background picture) or `.avatar2` (initials), `.name` and "130 <span>Movies</span> 38 <span>TV Shows</span>".
+     10 per page. Returns [{id, key, name, href, image, movies, shows}] (counts -1 when not given). */
+  function people(input, base) {
+    var data = asData(input), html = '';
+    if (typeof input === 'string' && data == null) html = input;
+    else if (data && typeof data === 'object') {
+      var d = data.data != null ? data.data : data;
+      html = typeof d === 'string' ? d : (d && (d.list || d.html)) || '';
+    }
+    var out = [], seen = {};
+    if (typeof html !== 'string' || !html) return out;
+    base = httpish(base) ? String(base) : defaultBase();
+    var doc = U.parseHTML(html);
+    U.each(qsa(doc, 'a[href*="/actor/"]'), function (a) {
+      var id = personId(attr(a, 'href'), base);
+      if (!id || seen[id]) return;
+      var name = textOf(qs(a, '.name')) || U.text(attr(a, 'title')) || textOf(a);
+      if (!name || name.length > 120) return;
+      seen[id] = true;
+      var counts = textOf(a), mv = /(\d+)\s*Movies?\b/i.exec(counts), tv = /(\d+)\s*TV\s*Shows?\b/i.exec(counts);
+      out.push({
+        id: id, key: 'person:' + id, name: name, href: originOf(base) + '/actor/' + id,
+        image: bgUrl(qs(a, '.avatar'), base) || imgUrl(qs(a, 'img'), base),
+        movies: mv ? toInt(mv[1]) : -1, shows: tv ? toInt(tv[1]) : -1
+      });
+    });
     return out;
   }
 
@@ -1274,8 +1475,57 @@ var Site = (function () {
     });
   }
 
+  /* The mobile title page (what the site serves to TV user agents since 2026-10): facts sit in `.con_right` --
+     `p.type` "<span>R</span>crime,drama", `p.length` "<span>1972</span><span>2h 55min</span>" (shows: a date and
+     "Update to S03 E06"), `.score > div` with freshness/audience pictures and `p.score2`, the overview in `p.desc2 span`
+     or `p.desc span`, the backdrop only in a `<style>` rule `.contents .con_bg{background:url(...)}`; the files are
+     `#file_bg li.play[oss_download_url]` (see source()). Fills what the desktop rules left empty. */
+  function mobileFactsInto(doc, base, d) {
+    var right = qs(doc, '.con_right');
+    if (!right) return;
+    U.each(qsa(right, 'p.length span'), function (sp) {
+      var t = textOf(sp), up = /Update to\b.*$/i.exec(t);
+      if (up && !d.update) d.update = U.text(up[0]);
+      else if (!d.year && /^(?:18|19|20)\d\d$/.test(t)) d.year = t;
+      else if (!d.runtime && normRuntime(t)) d.runtime = normRuntime(t);
+    });
+    var type = qs(right, 'p.type');
+    if (type) {
+      var cert = textOf(qs(type, 'span')), rest = U.text(String(type.textContent || '').slice(String(qs(type, 'span') ? qs(type, 'span').textContent : '').length));
+      if (!d.certification && CERT_RE.test(cert)) d.certification = cert;
+      if (!d.genres.length && rest && /^[A-Za-z][A-Za-z&'\-\/\s]*(?:,\s*[A-Za-z][A-Za-z&'\-\/\s]*)*$/.test(rest)) d.genres = splitGenres(rest);
+    }
+    U.each(qsa(right, '.score > div'), function (box) {
+      var img = attr(qs(box, 'img'), 'src'), v = normRating(textOf(qs(box, '.score2')));
+      if (/audience/i.test(img)) { if (!d.ratings.audience) d.ratings.audience = v; }
+      else if (/fresh|tomato|rotten/i.test(img) && !d.ratings.tomato) d.ratings.tomato = v;
+    });
+    var ov = textOf(qs(right, 'p.desc2 span')) || textOf(qs(doc, '.contents .list p.desc span'));
+    if (ov) d.overview = ov;
+    if (!d.backdropOriginal) {
+      U.each(qsa(doc, 'style'), function (st) {
+        var m = /\.con_bg\s*\{([^}]*)\}/.exec(String(st.textContent || ''));
+        var u = m ? firstReal(styleUrls(m[1]), base) : '';
+        if (u) { d.backdropOriginal = u; return false; }
+      });
+      d.backdrop = d.backdropOriginal.replace('/t/p/original/', '/t/p/w1280/');
+    }
+  }
+
   function castOf(doc, base) {
     var out = [], seen = {};
+    /* Mobile layout: `.actor > div` per person with `a[href=/actor/ID] p.avatar`, `p.name`, `p.role`, `p.position`. */
+    U.each(qsa(doc, '.actor > div'), function (box) {
+      var nameEl = qs(box, '.name');
+      var a = qs(box, 'a[href*="/actor/"]');
+      if (!nameEl || !a || qs(box, '.personnel')) return;
+      var name = textOf(nameEl);
+      if (!name || seen['$' + name]) return;
+      seen['$' + name] = true;
+      var character = textOf(qs(box, '.role')), job = U.titleCase(textOf(qs(box, '.position')));
+      out.push({ name: name, role: character || job, character: character, job: job,
+        image: bgUrl(qs(box, '.avatar'), base) || imgUrl(qs(box, 'img'), base), href: sameSiteUrl(attr(a, 'href'), base) });
+    });
     U.each(qsa(doc, '.actor a'), function (a) {
       var per = qs(a, '.personnel');
       if (!per) return;
@@ -1434,7 +1684,7 @@ var Site = (function () {
      unwatched episode (seasons and episodes from 1: specials are never picked on their own); else the first episode.
      null when the page lists no episodes to choose from (the caller then lets the website decide). */
   function nextEpisodeOf(d) {
-    var m = /S(\d{1,4})\s*E(\d{1,4})/i.exec(d.playLabel || '');
+    var m = /S(\d{1,4})\s*:?\s*E(\d{1,4})/i.exec(d.playLabel || '');   /* "S2E3", mobile "CONTINUE S1:E1" */
     if (m && toInt(m[1]) > 0) return { season: toInt(m[1]), episode: toInt(m[2]), code: 'S' + toInt(m[1]) + 'E' + toInt(m[2]), resume: true };
     var seasons = [];
     for (var k in d.allEpisodes) if (d.allEpisodes.hasOwnProperty(k) && toInt(k) > 0 && d.allEpisodes[k].length) seasons.push(toInt(k));
@@ -1467,6 +1717,7 @@ var Site = (function () {
     d.year = yearOf(textOf(qs(doc, '.year')));
     d.playLabel = 'PLAY';
     d.related = relatedOf(doc, base, d.key);
+    d.cast = castOf(doc, base);
     return d;
   }
 
@@ -1496,6 +1747,8 @@ var Site = (function () {
     d.playLabel = textOf(qs(doc, '#save_progress')) || textOf(qs(doc, '.start_app .play span')) || textOf(qs(doc, '.start_app')) || 'PLAY';
     var lis = qsa(doc, '.sidebarbg2 li.play[oss_download_url]');
     if (!lis.length) lis = qsa(doc, '.sidebarbg2 li.play');
+    if (!lis.length) lis = qsa(doc, '#file_bg li.play[oss_download_url]');   /* the mobile layout (TV user agents) */
+    mobileFactsInto(doc, base, d);
     d.sources = U.map(lis, function (li, i) { return source(li, i); });
     d.cast = castOf(doc, base);
     d.related = relatedOf(doc, base, d.key);
@@ -1786,9 +2039,12 @@ var Site = (function () {
     if (U.isVisible(el)) { try { el.style.setProperty('display', 'none', 'important'); } catch (e) {} }
   }
 
+  /* The website's file picker: `.sidebarbg2` (desktop layout) or `#file_bg` (the mobile layout TV user agents get). */
+  var PICKER_SEL = '.sidebarbg2, #file_bg';
+
   function liveSourceItems() {
-    var items = visibleOnly(qsa(document, '.sidebarbg2 li.play'));
-    return items.length ? items : visibleOnly(qsa(document, '.sidebarbg2 li[oss_download_url]'));
+    var items = visibleOnly(qsa(document, '.sidebarbg2 li.play, #file_bg li.play'));
+    return items.length ? items : visibleOnly(qsa(document, '.sidebarbg2 li[oss_download_url], #file_bg li[oss_download_url]'));
   }
 
   /* ---------- quiet: the hidden website page stops downloading pictures ---------- */
@@ -1912,15 +2168,15 @@ var Site = (function () {
     sourceList: function () {
       return U.map(liveSourceItems(), function (li, i) { var s = source(li, i); s.el = li; return s; });
     },
-    sourcePickerOpen: function () { return visibleOnly(qsa(document, '.sidebarbg2')).length > 0; },
+    sourcePickerOpen: function () { return visibleOnly(qsa(document, PICKER_SEL)).length > 0; },
     closeSourcePicker: function () {
-      var boxes = visibleOnly(qsa(document, '.sidebarbg2'));
+      var boxes = visibleOnly(qsa(document, PICKER_SEL));
       U.each(boxes, function (box) {
-        var btn = visibleOnly(qsa(box, '.close'))[0] || qs(box, '.close');
-        if (btn) click(qs(btn, 'img') || btn);
+        var btn = visibleOnly(qsa(box, '.close, .fav_close'))[0] || qs(box, '.close, .fav_close');
+        if (btn) click(btn.tagName === 'IMG' ? btn : qs(btn, 'img') || btn);
         forceHide(box);
       });
-      return visibleOnly(qsa(document, '.sidebarbg2')).length === 0;
+      return visibleOnly(qsa(document, PICKER_SEL)).length === 0;
     },
     playerOpen: livePlayerOpen,
     playerContainer: playerContainer,
@@ -1950,6 +2206,10 @@ var Site = (function () {
 
   function enc(v) { return encodeURIComponent(U.text(v)); }
 
+  function searchHref(q, type, page) {
+    return siteOrigin() + '/index/search?word=' + enc(q) + (type ? '&type=' + enc(type) : '') + (toInt(page) > 1 ? '&page=' + toInt(page) : '');
+  }
+
   var url = {
     origin: function () { return siteOrigin(); },
     home: function () { return siteOrigin() + '/'; },
@@ -1958,9 +2218,14 @@ var Site = (function () {
     library: function () { return siteOrigin() + '/index/index/my_box'; },
     history: function () { return siteOrigin() + '/index/index/history'; },
     list: function (type) { return siteOrigin() + '/index/index/movie_list?type=' + enc(type); },
-    search: function (q, type, page) {
-      return siteOrigin() + '/index/search?word=' + enc(q) + (type ? '&type=' + enc(type) : '') + (toInt(page) > 1 ? '&page=' + toInt(page) : '');
-    },
+    search: function (q, type, page) { return searchHref(q, type, page); },
+    /* Movies or TV Shows with the filter panel's parameters (filters may be omitted). */
+    browse: function (kind, f, page) { return browseUrl(kind, f, page); },
+    /* The website's actor search (POST: body from peopleBody), its actor page and an actor's full list per kind. */
+    people: function (q) { return siteOrigin() + '/index/search/search?key=' + enc(q); },
+    peopleBody: function (q, page) { return 'key=' + enc(q) + '&page=' + Math.max(1, toInt(page) || 1) + '&type=actor&ajax=1'; },
+    person: function (id) { return siteOrigin() + '/actor/' + toInt(id); },
+    personWorks: function (id, kind) { return siteOrigin() + '/index/index/actor_works?id=' + toInt(id) + '&type=' + (kindOf(kind) === 'tv' ? 'tv' : 'movie'); },
     title: function (kind, id, season) {
       return siteOrigin() + titlePath(kind, id) + (kindOf(kind) === 'tv' && toInt(season) > 0 ? '?season=' + toInt(season) : '');
     },
@@ -2001,6 +2266,11 @@ var Site = (function () {
     home: total('home', home, function () { return { rows: [], banners: [] }; }),
     list: total('list', list, function () { return { title: '', items: [], next: '', chips: [] }; }),
     search: total('search', search, function () { return { query: '', type: 'all', total: null, types: [], items: [], playlists: [], next: '', empty: true }; }),
+    filters: total('filters', filters, null),
+    filterSpec: total('filterSpec', filterSpec, function () { return { kind: 'movie', groups: [], selected: emptyFilters(), live: false }; }),
+    normFilters: total('normFilters', normFilters, emptyFilters),
+    people: total('people', people, function () { return []; }),
+    personId: total('personId', function (href, base) { return personId(href, httpish(base) ? base : defaultBase()); }, emptyStr),
     detail: total('detail', detail, null),
     source: total('source', source, function () { return { index: 0, quality: '', file: '', size: '', date: '', url: '' }; }),
     thumb: function (u, w, q) { try { return thumb(u, w, q); } catch (e) { try { Log.warn('site:thumb', e); } catch (e2) {} return u; } },
@@ -2082,17 +2352,20 @@ var Api = (function () {
 
   function retryable(err) { return !!err && (err.code === 'network' || /^http-5\d\d$/.test(err.code)); }
 
-  function request(url, headers, cb, attempt) {
+  /* body (optional): a form-encoded POST body (the website's own actor search); otherwise a GET. */
+  function request(url, headers, cb, attempt, body) {
     attempt = attempt || 0;
     stats.requests++;
     var started = U.now();
-    U.xhr({ url: url, timeout: cfg.timeout, headers: headers }, function (err, res) {
+    var opts = { url: url, timeout: cfg.timeout, headers: headers };
+    if (body != null) { opts.method = 'POST'; opts.body = body; }
+    U.xhr(opts, function (err, res) {
       /* U.xhr's abort() on timeout fires readystatechange first, which reports status 0 as 'network': reclassify. */
       if (err && err.code === 'network' && U.now() - started >= cfg.timeout - 20) err = { code: 'timeout', status: 0 };
       if (err && attempt < 1 && retryable(err)) {
         stats.retries++;
         Log.info('api-retry', err.code + ' ' + url);
-        U.later(function () { request(url, headers, cb, attempt + 1); }, cfg.retryDelay, 'api-retry');
+        U.later(function () { request(url, headers, cb, attempt + 1, body); }, cfg.retryDelay, 'api-retry');
         return;
       }
       if (err) { err.url = url; cb(err, null); return; }
@@ -2142,11 +2415,16 @@ var Api = (function () {
     });
   }
 
-  function fetchJSON(url, cb) {
+  var JSON_HEADERS = { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01' };
+  var FORM_HEADERS = { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01', 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' };
+
+  /* body (optional): POST it form-encoded (postJSON). */
+  function fetchJSON(url, cb, body) {
     var target = normalizeUrl(url);
     if (!target) { deliver(cb, fail('bad-url', String(url))); return; }
-    share('json ' + target, cb, function (finish) {
-      request(target, { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json, text/javascript, */*; q=0.01' }, function (err, res) {
+    var post = body != null;
+    share((post ? 'post ' : 'json ') + target + (post ? ' ' + body : ''), cb, function (finish) {
+      request(target, post ? FORM_HEADERS : JSON_HEADERS, function (err, res) {
         if (err) { finish(err); return; }
         var data = U.parseJSON(res.text);
         if (data == null) {
@@ -2154,9 +2432,11 @@ var Api = (function () {
           return;
         }
         finish(null, data);
-      });
+      }, 0, post ? String(body) : null);
     });
   }
+
+  function postJSON(url, body, cb) { fetchJSON(url, cb, body == null ? '' : body); }
 
   function withDoc(url, parse, cb) {
     fetchDoc(url, function (err, res) {
@@ -2226,6 +2506,31 @@ var Api = (function () {
       res.page = page;
       if (!res.query) res.query = q;
       if (page === 1) addRecentSearch(q);
+      cb(null, res);
+    });
+  }
+
+  /* ---------- people search ---------- */
+
+  /* people(q, page, cb) -> {query, page, items: [person], next: bool}. The website's own actor search (a POST its
+     script makes); like the search page it records the query in the server-side history, so it runs only on an
+     explicit submit, and answers are kept in memory (10 min) so paging back and forth never asks twice. */
+  var PEOPLE_PAGE = 10, PEOPLE_MAX = 20, peopleCache = { keys: [], map: {} };
+
+  function people(q, page, cb) {
+    q = U.text(q);
+    page = Math.max(1, parseInt(page, 10) || 1);
+    if (!q) { deliver(cb, null, { query: '', page: page, items: [], next: false }); return; }
+    var ck = q.toLowerCase() + '|' + page, hit = has(peopleCache.map, ck) ? peopleCache.map[ck] : null;
+    if (hit && U.now() - hit.t < cfg.memTtl) { deliver(cb, null, copy(hit.v)); return; }
+    postJSON(Site.url.people(q), Site.url.peopleBody(q, page), function (err, data) {
+      if (err) { cb(err, null); return; }
+      if (data && typeof data === 'object' && data.code != null && +data.code !== 1) { cb(fail('site-error', Site.url.people(q), { message: String(data.msg || '') }), null); return; }
+      var items = Site.people(data, Site.url.origin() + '/');
+      var res = { query: q, page: page, items: items, next: items.length >= PEOPLE_PAGE };
+      if (!has(peopleCache.map, ck)) peopleCache.keys.push(ck);
+      peopleCache.map[ck] = { t: U.now(), v: copy(res) };
+      while (peopleCache.keys.length > PEOPLE_MAX) delete peopleCache.map[peopleCache.keys.shift()];
       cb(null, res);
     });
   }
@@ -2576,6 +2881,7 @@ var Api = (function () {
     mem = { keys: [], map: {} };
     lists = { keys: [], map: {} };
     suggestCache = { keys: [], map: {} };
+    peopleCache = { keys: [], map: {} };
     metaState = { v: 1, order: [], items: {} };
     metaDirty = true;
     flush();
@@ -2604,7 +2910,9 @@ var Api = (function () {
 
   return {
     fetchDoc: guardAsync('fetchDoc', fetchDoc),
-    fetchJSON: guardAsync('fetchJSON', fetchJSON),
+    fetchJSON: guardAsync('fetchJSON', function (url, cb) { fetchJSON(url, cb); }),
+    postJSON: guardAsync('postJSON', postJSON),
+    people: guardAsync('people', people),
     home: guardAsync('home', home),
     list: guardAsync('list', list),
     listCached: guardSync('listCached', listCached, null),
@@ -2899,7 +3207,8 @@ var Icons = (function () {
     motion: '<path d="M3 11h8.6v2H3zm2-4.5h9v2H5zm0 9h9v2H5zM16.5 5a7 7 0 0 1 0 14v-2.2a4.8 4.8 0 0 0 0-9.6z"/>',
     remote: '<path fill-rule="evenodd" d="M8.4 2h7.2c.8 0 1.4.6 1.4 1.4v17.2c0 .8-.6 1.4-1.4 1.4H8.4c-.8 0-1.4-.6-1.4-1.4V3.4C7 2.6 7.6 2 8.4 2zM12 4.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8zM9.6 12v2h2v-2zm2.8 0v2h2v-2zm-2.8 3.2v2h2v-2zm2.8 0v2h2v-2z"/>',
     subtitles: '<path fill-rule="evenodd" d="M4.2 4.5h15.6c.7 0 1.2.5 1.2 1.2v12.6c0 .7-.5 1.2-1.2 1.2H4.2c-.7 0-1.2-.5-1.2-1.2V5.7c0-.7.5-1.2 1.2-1.2zM5.2 6.7v10.6h13.6V6.7zM6.8 11.4h4.8v1.9H6.8zm6.2 0h4.2v1.9H13zm-6.2 3h7.4v1.9H6.8zm8.6 0h1.8v1.9h-1.8z"/>',
-    spark: '<path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/>'
+    spark: '<path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/>',
+    filter: '<path d="M3 6h18v2.2H3zm0 9.8h18V18H3z"/><circle cx="15.5" cy="7.1" r="2.9"/><circle cx="8.5" cy="16.9" r="2.9"/>'
   };
 
   function markup(name) {
@@ -3195,8 +3504,12 @@ var Kit = (function () {
       if (item.rating) sub.push(item.rating);
       if (sub.length) {
         var s = el('div', 'mb-card-sub', null, c);
-        el('span', null, sub[0], s);
-        if (sub[1]) { s.appendChild(Icons.el('star', 'mb-card-star')); el('span', null, sub[1], s); }
+        /* A rating alone (a page that names no year) still reads as a rating. */
+        if (sub.length === 1 && sub[0] === item.rating) { s.appendChild(Icons.el('star', 'mb-card-star mb-card-star--first')); el('span', null, sub[0], s); }
+        else {
+          el('span', null, sub[0], s);
+          if (sub[1]) { s.appendChild(Icons.el('star', 'mb-card-star')); el('span', null, sub[1], s); }
+        }
       }
     }
     return c;
@@ -3645,15 +3958,22 @@ var Screens = (function () {
   /* A title the viewer rests on in a grid or row is prefetched after Kit.timing('dwell'), like Home's hero (one request
      at a time, the newest wins: Api.prefetch), so OK opens its detail screen with the page already read. */
   var restTimer = null;
-  function prefetchOnRest(item) {
+  /* card (optional): a card whose page named no title (a person's lists) learns it from the prefetched page. */
+  function prefetchOnRest(item, card) {
     clearTimeout(restTimer);
     restTimer = null;
     if (!item || !item.id) return;
     var dwell = 450;
     try { if (typeof Kit.timing === 'function') dwell = Kit.timing('dwell') || 450; } catch (e) { dwell = 450; }
+    var learn = card && !item.title ? function (err, d) {
+      var t = d && d.title;
+      if (!t) { try { var c = Api.cached(item.kind, item.id); t = c && c.title; } catch (e) {} }
+      if (!t) { var m = meta(item.key); t = m && m.title; }
+      if (t) Kit.setCardTitle(card, t);
+    } : null;
     restTimer = U.later(function () {
       restTimer = null;
-      try { if (typeof Api !== 'undefined' && Api.prefetch) Api.prefetch(item); } catch (e) { Log.warn('prefetch', e); }
+      try { if (typeof Api !== 'undefined' && Api.prefetch) Api.prefetch(item, learn || undefined); } catch (e) { Log.warn('prefetch', e); }
     }, dwell, 'rest-prefetch');
   }
 
@@ -4647,6 +4967,8 @@ var Screens = (function () {
           var c = el('div', 'mb-person', null, cr.track);
           Kit.focusable(c, 'cast|' + p.name);
           c.__person = p;
+          var pid = p.href ? site('personId', [p.href], '') : '';
+          if (pid) c.setAttribute('data-person', pid);
           el('div', 'mb-person-name', p.name, c);
           el('div', 'mb-person-role', U.titleCase(p.role || '') || '\u00a0', c);
         });
@@ -4798,7 +5120,7 @@ var Screens = (function () {
         return true;
       }
       if (node && node.__item) { App.push('detail', { kind: node.__item.kind, id: node.__item.id, item: compactItem(node.__item) }); return true; }
-      if (node && node.__person) { App.push('search', { query: node.__person.name, submit: true }); return true; }
+      if (node && node.__person) { openPerson(node.__person); return true; }
       return false;
     };
 
@@ -4826,6 +5148,14 @@ var Screens = (function () {
     return s;
   };
 
+  /* A cast entry or a people result: the person's screen when the website names their page, else a title search for
+     the name (older markup). */
+  function openPerson(p) {
+    var id = p && (p.id || (p.href ? site('personId', [p.href], '') : ''));
+    if (id) App.push('browse', Filters.personParams({ id: id, name: p.name, image: p.image, movies: p.movies, shows: p.shows, job: p.job }));
+    else if (p && p.name) App.push('search', { query: p.name, submit: true });
+  }
+
   /* ---------- Search ---------- */
 
   var KEYS = 'abcdefghijklmnopqrstuvwxyz0123456789';
@@ -4833,7 +5163,7 @@ var Screens = (function () {
   registry.search = function (params) {
     var s = base('search', 'search');
     s.nav = 'search';
-    var q = U.text(params.query || '').slice(0, 80), type = params.type || 'all';
+    var q = U.text(params.query || '').slice(0, 80), type = /^(?:all|movie|tv|actor)$/.test(params.type || '') ? params.type : 'all';
     var results = null, page = 1, next = '', loadingMore = false, searchSeq = 0, sugSeq = 0, total = null, capped = false;
     var MAX_RESULTS = 600, MAX_SUGGEST = 6;
     var left = el('div', 'mb-search-left', null, s.el);
@@ -4843,7 +5173,7 @@ var Screens = (function () {
     var queryEl = el('span', null, '', qt);
     queryEl.id = 'mbptv-query';
     el('span', 'mb-caret', null, qt);
-    el('span', 'mb-placeholder', 'Search movies and shows', line);
+    var placeholder = el('span', 'mb-placeholder', '', line);
     var kb = Kit.zone(el('div', 'mb-keyboard', null, left), 'keyboard');
     var firstKey = null;
     U.each(KEYS.split(''), function (ch) {
@@ -4872,8 +5202,11 @@ var Screens = (function () {
     var headTitle = el('div', 'mb-section', '', head);
     var headCount = el('div', 'mb-count', '', head);
     var tabs = Kit.zone(el('div', 'mb-chiprow mb-search-tabs', null, right), 'tabs');
-    U.each([['all', 'All'], ['movie', 'Movies'], ['tv', 'TV Shows']], function (t) {
-      var c = Kit.chip(t[1], { key: 'type|' + t[0], parent: tabs });
+    /* What the next search looks for: titles (All / Movies / TV Shows, the search page) or People (the website's own
+       actor search). The tabs show in every view, so People can be chosen before typing; outside the results,
+       choosing a tab never fetches anything (every search fetch is saved in the account's search history). */
+    U.each([['all', 'All'], ['movie', 'Movies'], ['tv', 'TV Shows'], ['actor', 'People']], function (t) {
+      var c = Kit.chip(t[1], { key: 'type|' + t[0], parent: tabs, icon: t[0] === 'actor' ? 'user' : null });
       c.setAttribute('data-type', t[0]);
     });
     var gport = el('div', 'mb-grid-port', null, right);
@@ -4882,7 +5215,8 @@ var Screens = (function () {
     var sugBox = el('div', 'mb-suggest-box', null, right);
     var sug = Kit.zone(el('div', 'mb-suggest', null, sugBox), 'list');
     var sugHint = el('div', 'mb-suggest-hint', 'Keep typing, or choose Search to see every result.', sugBox);
-    var discover = el('div', 'mb-discover', null, right);
+    var dport = el('div', 'mb-discover-port', null, right);
+    var discover = el('div', 'mb-discover', null, dport);
 
     /* The right side shows one of: results (the submitted query is the one on screen), suggestions (a query is typed)
        or discovery (recent and trending searches, for an empty query). Results stay in memory while the viewer edits
@@ -4893,15 +5227,18 @@ var Screens = (function () {
       return t ? 'suggest' : 'discover';
     }
 
+    function people() { return type === 'actor'; }
+
     function layout() {
       var mode = showing();
       gport.style.display = mode === 'results' ? '' : 'none';
-      tabs.style.display = mode === 'results' ? '' : 'none';
       sugBox.style.display = mode === 'suggest' ? '' : 'none';
-      discover.style.display = mode === 'discover' ? '' : 'none';
+      dport.style.display = mode === 'discover' ? '' : 'none';
       sugHint.style.display = sug.firstChild ? 'none' : '';
+      sugHint.textContent = people() ? 'Choose Search to find people named \u201c' + U.text(q) + '\u201d.' : 'Keep typing, or choose Search to see every result.';
+      placeholder.textContent = people() ? 'Search people by name' : 'Search movies and shows';
       if (mode === 'results') headFor(results.query, total);
-      else if (mode === 'suggest') { headTitle.textContent = 'Suggestions'; headCount.textContent = ''; }
+      else if (mode === 'suggest') { headTitle.textContent = people() ? 'People' : 'Suggestions'; headCount.textContent = ''; }
       else { headTitle.textContent = 'Find something to watch'; headCount.textContent = ''; }
       /* Focus left on a control the new view hides goes back to the keyboard. */
       var cur = Focus.current();
@@ -4923,7 +5260,8 @@ var Screens = (function () {
     var suggestSoon = U.debounce(function () { fetchSuggest(); }, 350);
     function scheduleSuggest() {
       sugSeq++;
-      if (!U.text(q)) { suggestSoon.cancel(); renderSuggestions([]); return; }
+      /* The website suggests titles only: People searches skip suggestions. */
+      if (!U.text(q) || people()) { suggestSoon.cancel(); renderSuggestions([]); return; }
       suggestSoon();
     }
 
@@ -4972,11 +5310,28 @@ var Screens = (function () {
     }
 
     /* Rebuilding the chips (when the website's own lists arrive) keeps focus on the same chip when it still exists. */
+    /* Quick ways in without typing: a genre or a year opens Movies (TV Shows when that tab is chosen) filtered by it. */
+    function browseChips(title, list, zoneName, kind) {
+      el('div', 'mb-section', title, discover);
+      var row = Kit.zone(el('div', 'mb-chiprow', null, discover), zoneName);
+      U.each(list, function (b) {
+        var c = Kit.chip(b.label, { key: zoneName + '|' + b.label, parent: row });
+        c.setAttribute('data-browse', b.label);
+        c.__browse = { kind: kind, label: b.label, filters: b.filters };
+      });
+    }
+
+    var discoverLists = { recent: [], trending: [] };
     function fillDiscover(recent, trending) {
+      discoverLists = { recent: recent || [], trending: trending || [] };
       var cur0 = Focus.current(), key0 = cur0 && discover.contains(cur0) ? Focus.keyOf(cur0) : '';
       U.empty(discover);
-      el('div', 'mb-discover-hint', 'Type with the keyboard or the remote\u2019s number keys. Suggestions appear as you type.', discover);
+      Kit.setY(discover, 0);
+      el('div', 'mb-discover-hint', people() ? 'Type a name, then choose Search to find people.' : 'Type with the keyboard or the remote\u2019s number keys. Suggestions appear as you type.', discover);
       chips('Recent searches', recent, 'chips:recent');
+      var kind = type === 'tv' ? 'tv' : 'movie', quick = Filters.quick(kind), what = kind === 'tv' ? 'TV shows' : 'movies';
+      browseChips('Browse ' + what + ' by genre', quick.genres, 'chips:genre', kind);
+      browseChips('Browse ' + what + ' by year', quick.years, 'chips:year', kind);
       chips('Trending now', trending || [], 'chips:trending');
       if (key0) App.focus(Focus.byKey(discover, key0) || firstKey);
     }
@@ -5001,8 +5356,9 @@ var Screens = (function () {
     }
 
     function headFor(query, count) {
-      headTitle.textContent = 'Results for \u201c' + query + '\u201d';
-      headCount.textContent = count == null ? '' : count === 1 ? '1 title' : count + ' titles';
+      headTitle.textContent = (results && results.people ? 'People named \u201c' : 'Results for \u201c') + query + '\u201d';
+      if (results && results.people) headCount.textContent = count == null || next ? '' : count === 1 ? '1 person' : count + ' people';
+      else headCount.textContent = count == null ? '' : count === 1 ? '1 title' : count + ' titles';
     }
 
     function showResultsLoading() {
@@ -5014,8 +5370,20 @@ var Screens = (function () {
     }
 
     function addCards(items) {
-      U.each(items, function (it) { grid.appendChild(Kit.card(it, { size: 'poster', zone: 'grid', sub: true })); });
+      U.each(items, function (it) { grid.appendChild(results && results.people ? Filters.personCard(it) : Kit.card(it, { size: 'poster', zone: 'grid', sub: true })); });
       Kit.lazySoon(s.el);
+    }
+
+    /* People results: only well-formed entries, once each (sessionStorage snapshots come back through here too). */
+    function normPeople(list) {
+      var out = [], seen = {};
+      U.each(list || [], function (p) {
+        if (!p || !/^\d+$/.test(String(p.id || '')) || !p.name || seen[p.id]) return;
+        seen[p.id] = true;
+        out.push({ id: String(p.id), key: 'person:' + p.id, name: U.text(p.name), image: Kit.safeImage(p.image) ? p.image : '',
+          movies: typeof p.movies === 'number' ? p.movies : -1, shows: typeof p.shows === 'number' ? p.shows : -1 });
+      });
+      return out;
     }
 
     /* Paging stops at 600 titles (memory and key cost stay bounded on the TV); the website has the rest. */
@@ -5032,16 +5400,17 @@ var Screens = (function () {
       opts = opts || {};
       if (text != null) setQuery(text, false);
       var query = U.text(q);
-      if (!query) { App.toast('Type a title first'); return; }
+      if (!query) { App.toast(people() ? 'Type a name first' : 'Type a title first'); return; }
       suggestSoon.cancel();
       sugSeq++;
       var mine = ++searchSeq;
       var from = Focus.current();
       if (from && (grid.contains(from) || sugBox.contains(from) || discover.contains(from))) App.focus(go);
-      results = { query: query, type: type, items: [] };
+      results = { query: query, type: type, items: [], people: people() };
       page = 1; next = ''; total = null; capped = false;
       showResultsLoading();
       var submitFrom = Focus.current();
+      if (results.people) { submitPeople(query, mine, submitFrom, opts); return; }
       api('search', [query, type, 1], function (err, r) {
         if (!s.alive || mine !== searchSeq) return;
         U.empty(grid);
@@ -5055,7 +5424,8 @@ var Screens = (function () {
         var items = normItems(r && r.items);
         results.items = items;
         next = r && r.next || '';
-        total = r && typeof r.total === 'number' ? r.total : items.length;
+        /* The mobile layout names no total: the count shows once every page is in. */
+        total = r && typeof r.total === 'number' ? r.total : next ? null : items.length;
         if (showing() === 'results') headFor(query, total);
         if (!items.length) {
           stateBlock(grid, { icon: 'search', title: 'No matches for \u201c' + query + '\u201d',
@@ -5075,9 +5445,63 @@ var Screens = (function () {
       });
     }
 
+    /* People: the website's actor search (Api.people), 10 per page; OK on a person opens their titles. */
+    function submitPeople(query, mine, submitFrom, opts) {
+      api('people', [query, 1], function (err, r) {
+        if (!s.alive || mine !== searchSeq) return;
+        U.empty(grid);
+        if (err) {
+          if (err.code === 'signed-out') { fail(s, err); return; }
+          if (showing() === 'results') headFor(query, null);
+          stateBlock(grid, { icon: 'info', title: 'People search didn\u2019t load', text: errorMessage(err),
+            actions: [{ label: 'Try again', icon: 'reload', action: 'search-retry', primary: true }] }, 'buttons');
+          return;
+        }
+        var items = normPeople(r && r.items);
+        results.items = items;
+        next = r && r.next ? 'more' : '';
+        total = items.length;
+        if (showing() === 'results') headFor(query, total);
+        if (!items.length) {
+          stateBlock(grid, { icon: 'user', title: 'No people named \u201c' + query + '\u201d',
+            text: 'Check the spelling, or try the last name only.',
+            actions: [{ label: 'Search titles instead', icon: 'search', action: 'search-titles', primary: true }] }, 'buttons');
+          return;
+        }
+        addCards(items);
+        var now = Focus.current();
+        if (opts.focus && showing() === 'results' && (!now || now === submitFrom || !Focus.shown(now) || tabs.contains(now))) {
+          var f = Focus.firstIn(grid);
+          if (f) App.focus(f);
+        }
+        App.saveState();
+      });
+    }
+
+    function loadMorePeople() {
+      loadingMore = true;
+      var mine = searchSeq, query = results.query;
+      api('people', [query, page + 1], function (err, r) {
+        loadingMore = false;
+        if (!s.alive || mine !== searchSeq) return;
+        if (err) { App.toast('Couldn\u2019t load more people'); return; }
+        page++;
+        next = r && r.next ? 'more' : '';
+        var have = {};
+        U.each(results.items, function (p) { have[p.id] = true; });
+        var fresh = U.filter(normPeople(r && r.items), function (p) { return !have[p.id]; });
+        if (!fresh.length) next = '';
+        results.items = results.items.concat(fresh);
+        total = results.items.length;
+        addCards(fresh);
+        if (showing() === 'results') headFor(query, total);
+      });
+    }
+
     function loadMore() {
       if (!next || loadingMore || !results || capped) return;
       if (results.items.length >= MAX_RESULTS) { capNote(); return; }
+      if (results.people) { loadMorePeople(); return; }
       loadingMore = true;
       var mine = searchSeq, query = results.query;
       api('search', [query, type, page + 1], function (err, r) {
@@ -5091,13 +5515,15 @@ var Screens = (function () {
         var fresh = U.filter(normItems(r && r.items), function (it) { return !have[it.key]; });
         results.items = results.items.concat(fresh);
         addCards(fresh);
+        if (total == null && !next) { total = results.items.length; if (showing() === 'results') headFor(query, total); }
       });
     }
 
     function restoreSnapshot(snap) {
       if (!snap || !snap.items || !snap.items.length) return false;
-      q = snap.query; type = snap.type || 'all'; renderQuery();
-      results = { query: U.text(snap.query), type: type, items: normItems(snap.items) };
+      q = snap.query; type = /^(?:all|movie|tv|actor)$/.test(snap.type || '') ? snap.type : 'all'; renderQuery();
+      results = { query: U.text(snap.query), type: type, people: !!snap.people };
+      results.items = results.people ? normPeople(snap.items) : normItems(snap.items);
       next = snap.next || ''; page = snap.page || 1; total = snap.total;
       showResultsLoading();
       U.empty(grid);
@@ -5109,7 +5535,8 @@ var Screens = (function () {
     s.snapshot = function () {
       var p = { query: q, type: type };
       if (results && results.items.length) {
-        p.snap = { query: results.query, type: type, next: next, page: page, total: total, items: U.map(results.items.slice(0, 60), compactItem) };
+        p.snap = { query: results.query, type: results.type, next: next, page: page, total: total, people: !!results.people,
+          items: results.people ? results.items.slice(0, 60) : U.map(results.items.slice(0, 60), compactItem) };
       }
       return p;
     };
@@ -5126,10 +5553,12 @@ var Screens = (function () {
       U.toggleClass(s.el, 'in-results', inResults);
       if (z && grid.contains(z)) Kit.reveal(grid, gport, node, Kit.em() * 1, Kit.em() * 4);
       prefetchOnRest(z === grid ? node.__item : null);
-      if (z === grid && node.__item) {
+      if (z === grid && (node.__item || node.__person)) {
         var gi = Focus.gridInfo(node);
         if (gi && gi.index >= gi.count - 5) loadMore();
       }
+      /* The discover view scrolls when its rows are taller than the screen. */
+      if (z && discover.contains(z)) Kit.reveal(discover, dport, node, Kit.em() * 3.5, Kit.em() * 2);
     };
 
     /* Back from the results, suggestions or chips returns to the keyboard with the query kept; Back on the keyboard
@@ -5163,14 +5592,31 @@ var Screens = (function () {
       if (action === 'clear') { setQuery(''); return true; }
       if (action === 'search-submit') { submit(null, { focus: true }); return true; }
       if (action === 'search-retry') { submit(null, { focus: true }); return true; }
-      if (action === 'open-website') { App.openWebsite(siteUrl('search', [U.text(q), type, 1], '/index/search?word=' + encodeURIComponent(U.text(q)))); return true; }
+      /* The website's own People tab (type=actor) answered an error page in 2026-10: open its title search instead. */
+      if (action === 'open-website') { App.openWebsite(siteUrl('search', [U.text(q), people() ? 'all' : type, 1], '/index/search?word=' + encodeURIComponent(U.text(q)))); return true; }
       if (node && node.hasAttribute('data-suggestion')) { submit(node.getAttribute('data-suggestion'), { focus: true }); return true; }
       if (node && node.hasAttribute('data-query')) { submit(node.getAttribute('data-query'), { focus: true }); return true; }
+      if (action === 'search-titles') { type = 'all'; submit(null, { focus: true }); return true; }
       if (node && node.hasAttribute('data-type')) {
         var t = node.getAttribute('data-type');
-        if (t !== type || !results) { type = t; if (U.text(q)) submit(null, { focus: false }); else tabsState(); }
+        /* On the results the new tab searches again; elsewhere it only chooses what the next search looks for. */
+        var onResults = showing() === 'results';
+        type = t;
+        tabsState();
+        if (onResults && t !== results.type) submit(null, { focus: false });
+        else {
+          scheduleSuggest();
+          layout();
+          if (showing() === 'discover') fillDiscover(discoverLists.recent, discoverLists.trending);
+        }
         return true;
       }
+      if (node && node.__browse) {
+        var b = node.__browse;
+        App.push('browse', { filterKind: b.kind, filters: b.filters, title: b.label, kicker: b.kind === 'tv' ? 'TV Shows' : 'Movies' });
+        return true;
+      }
+      if (node && node.__person) { openPerson(node.__person); return true; }
       if (node && node.__item) { App.push('detail', { kind: node.__item.kind, id: node.__item.id, item: compactItem(node.__item) }); return true; }
       return false;
     };
@@ -5189,27 +5635,80 @@ var Screens = (function () {
     return s;
   };
 
-  /* ---------- Browse grid (movies, shows, lists, library) ---------- */
+  /* ---------- Browse grid (movies, shows, lists, library, a person's titles) ---------- */
 
+  /* params: {url, title, kicker, nav, tabs, filterKind: 'movie'|'tv' (Movies / TV Shows with the filter bar), filters
+     (a preset, e.g. a genre from Search), remember (the rail's screens: the filters are kept for the session), person
+     ({id, name, image, meta}: a person's titles, tabs Movies / TV Shows)}. */
   registry.browse = function (params, ctx) {
     var s = base('browse', 'browse');
     s.nav = params.nav || '';
-    var url = params.url || siteUrl('movies', [], '/movie');
-    var next = '', loadingMore = false, seq = 0, count = 0, keys = {}, capped = false;
+    var fkind = params.filterKind === 'tv' || params.filterKind === 'movie' ? params.filterKind : '';
+    var filt = fkind ? Filters.norm(params.filters || (params.remember ? Filters.load(fkind) : null)) : null;
+    var fgroups = fkind ? Filters.groups(fkind, null) : null;
+    var minRating = filt && filt.min ? +filt.min : 0;
+    var allUrl = fkind ? Filters.url(fkind, filt) : '';
+    var url = fkind ? allUrl : params.url || siteUrl('movies', [], '/movie');
+    var next = '', loadingMore = false, seq = 0, count = 0, scanned = 0, keys = {}, capped = false;
+    var fill = { pages: 0, shown: 0 }, chipsSeen = null, switchedEmpty = false;
     var vport = el('div', 'mb-vport', null, s.el);
     var vs = el('div', 'mb-vscroll', null, vport);
     var head = el('div', 'mb-browse-head', null, vs);
+    if (params.person && params.person.image) {
+      U.toggleClass(head, 'has-avatar', true);
+      var ava = el('div', 'mb-browse-avatar', null, head);
+      Kit.img(params.person.image, { cls: 'mb-card-img', parent: ava, w: 300, eager: true });
+    }
     el('div', 'mb-kicker', params.kicker || 'Browse', head);
     var titleEl = el('div', 'mb-h1', params.title || '', head);
-    var countEl = el('div', 'mb-meta', '', head);
+    var countEl = el('div', 'mb-meta', params.person && params.person.meta || '', head);
+    var bar = fkind ? Kit.zone(el('div', 'mb-btns mb-filter-bar', null, vs), 'buttons:filters') : null;
     var tabs = Kit.zone(el('div', 'mb-chiprow mb-browse-tabs', null, vs), 'tabs');
     var grid = Kit.zone(el('div', 'mb-grid', null, vs), 'grid');
     var foot = el('div', 'mb-grid-foot', null, vs);
+
+    /* The filter bar: Filter and sort, one pill per active filter (OK opens the sheet on that group), Reset. */
+    function renderBar() {
+      if (!bar) return;
+      var cur = Focus.current(), hadFocus = !!cur && bar.contains(cur), focusKey = hadFocus ? Focus.keyOf(cur) : '';
+      U.empty(bar);
+      var b = Kit.button({ label: 'Filter and sort', icon: 'filter', action: 'filters', parent: bar, key: 'bar|filters' });
+      b.__fgroup = '';
+      U.each(Filters.pills(filt, fgroups), function (p) {
+        var c = Kit.chip(p.label, { key: 'bar|pill|' + p.group + '|' + p.value, parent: bar, cls: 'mb-filter-pill is-selected' });
+        c.setAttribute('data-filter-pill', p.group);
+        c.__fgroup = p.group;
+      });
+      if (!Filters.isEmpty(filt)) Kit.button({ label: 'Reset', icon: 'close', action: 'filters-reset', parent: bar, key: 'bar|reset' });
+      if (hadFocus) App.focus(Focus.byKey(bar, focusKey) || Focus.firstIn(bar));
+    }
+
+    function openFilters(group) {
+      Filters.sheet({ kind: fkind, title: params.title || (fkind === 'tv' ? 'TV Shows' : 'Movies'), groups: fgroups, value: filt, focus: group,
+        onApply: applyFilters });
+    }
+
+    function applyFilters(f) {
+      filt = Filters.norm(f);
+      minRating = filt.min ? +filt.min : 0;
+      if (params.remember) Filters.save(fkind, filt);
+      allUrl = Filters.url(fkind, filt);
+      U.each(U.qsa(tabs, '.mb-chip'), function (c) { if (c.__all) c.__href = allUrl; });
+      renderBar();
+      load(allUrl, true);
+      App.saveState();
+    }
 
     function renderTabs(list, current) {
       U.empty(tabs);
       if (!list || !list.length) { tabs.style.display = 'none'; return; }
       tabs.style.display = '';
+      /* Movies and TV Shows: "All" (the filtered list) comes before the site's own categories. */
+      if (fkind) {
+        var all = Kit.chip(fkind === 'tv' ? 'All shows' : 'All movies', { key: 'tab|__all', parent: tabs });
+        all.__href = allUrl;
+        all.__all = true;
+      }
       U.each(list.slice(0, 16), function (t) {
         var c = Kit.chip(t.label, { key: 'tab|' + t.label, parent: tabs });
         c.__href = t.href || t.url;
@@ -5217,16 +5716,39 @@ var Screens = (function () {
       });
     }
 
+    function passes(it) {
+      if (!minRating) return true;
+      var r = parseFloat(it.rating);
+      return !isNaN(r) && r >= minRating;
+    }
+
+    /* Titles the page names without a title (a person's lists in the mobile layout) take it from the metadata cache. */
+    function named(it) {
+      if (!it.title) { var m = meta(it.key); if (m && m.title) it.title = m.title; }
+      return it;
+    }
+
     function add(items) {
       var fresh = U.filter(normItems(items), function (it) { return !keys[it.key]; });
-      U.each(fresh, function (it) { keys[it.key] = true; grid.appendChild(Kit.card(it, { size: 'grid', zone: 'grid', sub: true })); });
-      count += fresh.length;
+      var shown = 0;
+      U.each(fresh, function (it) {
+        keys[it.key] = true;
+        scanned++;
+        if (!passes(it)) return;
+        shown++;
+        grid.appendChild(Kit.card(named(it), { size: 'grid', zone: 'grid', sub: true }));
+      });
+      count += shown;
+      fill.shown += shown;
       Kit.lazySoon(s.el);
-      return fresh.length;
+      return shown;
     }
 
     function setCount() {
-      countEl.textContent = count && !next ? (count === 1 ? '1 title' : count + ' titles') : '';
+      if (params.person && params.person.meta) { countEl.textContent = params.person.meta; return; }
+      var n = count && !next ? (count === 1 ? '1 title' : count + ' titles') : '';
+      if (minRating && scanned) n = (count === 1 ? '1 title' : count + ' titles') + ' rated ' + minRating + '+ of ' + scanned + ' checked';
+      countEl.textContent = n;
     }
 
     function markTab() {
@@ -5236,10 +5758,11 @@ var Screens = (function () {
         /* Up from the grid lands on the selected chip. */
         if (on) tabs.__mbLast = c;
       });
+      if (bar) U.toggleClass(bar, 'is-off', url !== allUrl);
     }
 
     /* Paging stops at 600 titles (memory and key cost stay bounded on the TV); the website lists the rest. */
-    var MAX_TITLES = 600;
+    var MAX_TITLES = 600, MAX_SCANNED = 1500, FILL_TARGET = 20, FILL_PAGES = 6;
     function capNote() {
       if (capped) return;
       capped = true;
@@ -5250,11 +5773,40 @@ var Screens = (function () {
       Kit.button({ label: 'Open website', icon: 'globe', action: 'open-website', parent: btns, key: 'cap|open-website' });
     }
 
+    /* The minimum IMDb rating is checked on the TV: sorted by IMDb rating, the list ends at the first lower rating;
+       otherwise more pages are read (up to FILL_PAGES in a row) until FILL_TARGET more titles pass. */
+    function afterPage(items) {
+      if (!minRating || url !== allUrl) return false;
+      var last = items && items.length ? items[items.length - 1] : null;
+      if (filt.sort === 'rating' && last && last.rating && parseFloat(last.rating) < minRating) next = '';
+      if (next && fill.shown < FILL_TARGET && fill.pages < FILL_PAGES && scanned < MAX_SCANNED) {
+        fill.pages++;
+        loadMore(true);
+        return true;
+      }
+      return false;
+    }
+
+    function emptyState() {
+      U.empty(grid);
+      if (minRating && url === allUrl && scanned) {
+        stateBlock(grid, { icon: 'star', title: 'No titles rated IMDb ' + minRating + '+ here yet',
+          text: 'Checked ' + scanned + ' titles. Sort by IMDb rating to see the best rated first, or choose a lower minimum.',
+          actions: [{ label: 'Sort by IMDb rating', icon: 'star', action: 'filters-sort-imdb', primary: true }, { label: 'Change filters', icon: 'filter', action: 'filters' }] }, 'buttons');
+      } else if (fkind && url === allUrl && !Filters.isEmpty(filt)) {
+        stateBlock(grid, { icon: 'filter', title: 'Nothing matches these filters', text: 'Try fewer filters, or another year or genre.',
+          actions: [{ label: 'Change filters', icon: 'filter', action: 'filters', primary: true }, { label: 'Reset filters', icon: 'close', action: 'filters-reset' }] }, 'buttons');
+      } else {
+        stateBlock(grid, { icon: 'film', title: 'Nothing here yet', text: 'This list is empty right now. The website may show more.',
+          actions: [{ label: 'Open website', icon: 'globe', action: 'open-website', primary: true }] }, 'buttons');
+      }
+    }
+
     function load(target, keepTabs) {
       var mine = ++seq;
       url = target;
-      next = ''; count = 0; keys = {}; capped = false;
-      countEl.textContent = '';
+      next = ''; count = 0; scanned = 0; keys = {}; capped = false; fill = { pages: 0, shown: 0 };
+      countEl.textContent = params.person && params.person.meta || '';
       markTab();
       U.empty(grid); U.empty(foot);
       Kit.setY(vs, 0);
@@ -5266,18 +5818,26 @@ var Screens = (function () {
         U.empty(grid);
         if (err) {
           if (err.code === 'signed-out' || !keepTabs) { fail(s, err); return; }
-          stateBlock(grid, { icon: 'info', title: 'This list didn\u2019t load', text: errorMessage(err),
+          stateBlock(grid, { icon: 'info', title: 'This list didn’t load', text: errorMessage(err),
             actions: [{ label: 'Retry', icon: 'reload', action: 'retry-list', primary: true }, { label: 'Open website', icon: 'globe', action: 'open-website' }] }, 'buttons');
           return;
         }
         data = data || {};
         if (!params.title && data.title) titleEl.textContent = data.title;
+        /* The page's own filter panel names the choices it offers today (years move on). */
+        if (fkind && data.filters && url === allUrl) { fgroups = Filters.groups(fkind, data.filters); renderBar(); }
         /* Switching chips keeps the chip row (and focus on the chip); only the first load builds it. */
-        if (!params.tabs && !keepTabs) renderTabs(data.chips, url);
+        if (!params.tabs && !keepTabs && !chipsSeen) { chipsSeen = data.chips || []; renderTabs(chipsSeen, url); }
         next = data.next || '';
-        if (!add(data.items)) {
-          stateBlock(grid, { icon: 'film', title: 'Nothing here yet', text: 'This list is empty right now. The website may show more.',
-            actions: [{ label: 'Open website', icon: 'globe', action: 'open-website', primary: true }] }, 'buttons');
+        var shown = add(data.items);
+        var filling = afterPage(data.items);
+        if (!shown && !filling) {
+          /* A person with no movies: show their TV shows instead. */
+          if (params.person && !switchedEmpty && !next) {
+            var other = U.find(U.qsa(tabs, '.mb-chip'), function (c) { return c.__href && c.__href !== url; });
+            if (other) { switchedEmpty = true; load(other.__href, true); return; }
+          }
+          emptyState();
         }
         setCount();
         markTab();
@@ -5299,7 +5859,7 @@ var Screens = (function () {
           var cur = Focus.current();
           if (cur && grid.contains(cur) && cur !== Focus.firstIn(grid)) return;
           var hadFocus = !!cur && grid.contains(cur);
-          U.empty(grid); keys = {}; count = 0;
+          U.empty(grid); keys = {}; count = 0; scanned = 0; fill = { pages: 0, shown: 0 };
           done(null, data);
           if (hadFocus && Focus.firstIn(grid)) App.focus(Focus.firstIn(grid));
         });
@@ -5310,9 +5870,11 @@ var Screens = (function () {
 
     function listSig(data) { return U.map((data && data.items) || [], function (it) { return it.key + '|' + (it.progress >= 0 ? Math.round(it.progress * 100) : ''); }).join(',') + '>' + ((data && data.next) || ''); }
 
-    function loadMore() {
+    /* auto: a page read to fill a client-side filter, not one the viewer reached. */
+    function loadMore(auto) {
       if (!next || loadingMore || capped) return;
-      if (count >= MAX_TITLES) { capNote(); return; }
+      if (count >= MAX_TITLES || scanned >= MAX_SCANNED) { capNote(); return; }
+      if (!auto) fill = { pages: 0, shown: 0 };
       loadingMore = true;
       var mine = seq;
       U.empty(foot);
@@ -5321,22 +5883,23 @@ var Screens = (function () {
         loadingMore = false;
         if (!s.alive || mine !== seq) return;
         U.empty(foot);
-        if (err) { App.toast('Couldn\u2019t load more titles'); return; }
+        if (err) { App.toast('Couldn’t load more titles'); return; }
         next = data && data.next || '';
         add(data && data.items);
+        if (!afterPage(data && data.items) && !count) emptyState();
         setCount();
       });
     }
 
-    s.initialFocus = function () { return Focus.firstIn(grid) || Focus.firstIn(tabs) || Focus.firstIn(s.el); };
+    s.initialFocus = function () { return Focus.firstIn(grid) || (bar && Focus.firstIn(bar)) || Focus.firstIn(tabs) || Focus.firstIn(s.el); };
 
     s.onFocus = function (node) {
       var z = Focus.zoneOf(node);
-      prefetchOnRest(z === grid ? node.__item : null);
+      prefetchOnRest(z === grid ? node.__item : null, z === grid ? node : null);
       if (z === grid && node.__item) {
         Kit.reveal(vs, vport, node, Kit.em() * 3, Kit.em() * 3);
         var gi = Focus.gridInfo(node);
-        if (gi && gi.index >= gi.count - 6) loadMore();
+        if (gi && gi.index >= gi.count - 6) loadMore(false);
       } else if (z && (foot.contains(z) || grid.contains(z))) Kit.reveal(vs, vport, node, Kit.em() * 3, Kit.em() * 3);
       else Kit.setY(vs, 0);
     };
@@ -5344,14 +5907,26 @@ var Screens = (function () {
     s.act = function (action, node) {
       if (action === 'retry-list') { load(url, true); return true; }
       if (action === 'open-website') { App.openWebsite(url); return true; }
+      if (fkind && action === 'filters') { openFilters(node && node.__fgroup || ''); return true; }
+      if (fkind && action === 'filters-reset') { applyFilters(null); return true; }
+      if (fkind && action === 'filters-sort-imdb') { var f = Filters.norm(filt); f.sort = 'rating'; applyFilters(f); return true; }
+      if (node && node.__fgroup) { openFilters(node.__fgroup); return true; }
       if (node && node.__href) { if (node.__href !== url) load(node.__href, true); return true; }
       if (node && node.__item) { App.push('detail', { kind: node.__item.kind, id: node.__item.id, item: compactItem(node.__item) }); return true; }
       return false;
     };
 
+    /* The session copy keeps the filters (and drops a stale URL for the filtered screens). */
+    s.snapshot = function () {
+      var p = {};
+      for (var k in params) if (params.hasOwnProperty(k)) p[k] = params[k];
+      if (fkind) { p.filters = filt; p.url = allUrl; }
+      return p;
+    };
     s.onHide = function () { prefetchOnRest(null); };
     s.destroy = s.onHide;
 
+    renderBar();
     if (params.tabs) renderTabs(params.tabs, url);
     else tabs.style.display = 'none';
     load(url, false);
@@ -5619,6 +6194,258 @@ var Screens = (function () {
     create: create, has: function (name) { return !!registry[name]; },
     normItem: normItem, normItems: normItems, compactItem: compactItem, errorMessage: errorMessage, qualityLabel: qualityLabel,
     pref: pref, setPref: setPref, siteUrl: siteUrl, site: site
+  };
+}());
+/* ---- 45-ui-filters.js ---- */
+/* Filters (docs/ARCHITECTURE.md section 6.2 "Filter sheet"): the Movies / TV Shows filter state, its labels, the filter
+   sheet, and the People pieces (person cards and the person screen's parameters). The server filters by the website's
+   own list parameters (Site.url.browse); the minimum IMDb rating is the one filter the website does not offer, so it
+   is applied on the TV to the titles it loads (the browse screen pages on until it has enough). The last filters of
+   the Movies and TV Shows screens are kept for the session (sessionStorage mbptv:filters:v1). */
+var Filters = (function () {
+  var el = U.el;
+  var KEY = 'mbptv:filters:v1';
+  var MIN_CHOICES = [['', 'Any'], ['6', '6+'], ['7', '7+'], ['8', '8+']];
+  var SORT_PILLS = { rating: 'Top IMDb', tomato_meter: 'Top Rotten Tomatoes', view: 'Most watched' };
+  var QUICK_GENRES = ['1', '5', '8', '13', '17', '3', '19', '16', '6', '7', '9', '10'];
+  var QUICK_YEARS = ['2026', '2025', '2024', '2023', '2022', '2010-2015', '2000-2009', '1990-1999'];
+
+  function kindOf(kind) { return kind === 'tv' ? 'tv' : 'movie'; }
+  function isArray(x) { return Object.prototype.toString.call(x) === '[object Array]'; }
+
+  /* Every field present: the website's own (Site.normFilters) plus min ('' or '6'..'9', client-side). */
+  function norm(f) {
+    var out = null;
+    try { out = Site.normFilters(f); } catch (e) { out = null; }
+    if (!out) out = { sort: '', genr: [], year: '', tomato_meter: '', quality: '', rating: '', country: [] };
+    var m = f && typeof f === 'object' ? String(f.min == null ? '' : f.min) : '';
+    out.min = /^[5-9]$/.test(m) ? m : '';
+    return out;
+  }
+
+  function key(f) { return JSON.stringify(norm(f)); }
+  function same(a, b) { return key(a) === key(b); }
+
+  function isEmpty(f) {
+    f = norm(f);
+    for (var k in f) if (f.hasOwnProperty(k) && (isArray(f[k]) ? f[k].length : f[k])) return false;
+    return true;
+  }
+
+  function serverPart(f) { var o = norm(f); delete o.min; return o; }
+
+  function load(kind) {
+    var all = null;
+    try { all = Store.session.get(KEY, null); } catch (e) { all = null; }
+    return norm(all && typeof all === 'object' ? all[kindOf(kind)] : null);
+  }
+
+  function save(kind, f) {
+    try {
+      var all = Store.session.get(KEY, null);
+      if (!all || typeof all !== 'object') all = {};
+      all[kindOf(kind)] = norm(f);
+      Store.session.set(KEY, all);
+    } catch (e) { Log.warn('filters-save', e); }
+  }
+
+  function url(kind, f, page) { return Site.url.browse(kindOf(kind), serverPart(f), page); }
+
+  /* The groups the sheet shows: the page's own panel (Site.list(...).filters) or the built-in lists, plus the
+     client-side minimum IMDb rating after Year. */
+  function groups(kind, fromPage) {
+    var spec = fromPage && isArray(fromPage.groups) && fromPage.groups.length ? fromPage : null;
+    if (!spec) { try { spec = Site.filterSpec(kindOf(kind)); } catch (e) { spec = { groups: [] }; } }
+    var out = [];
+    U.each(spec.groups || [], function (g) {
+      if (!g || !g.name || !isArray(g.options)) return;
+      var options = g.name === 'sort' ? U.filter(g.options, function (o) { return o.value !== 'add'; }) : g.options;
+      out.push({ name: g.name, title: g.title || g.name, multi: !!g.multi, options: options, local: false });
+      if (g.name === 'year') out.push(minGroup());
+    });
+    if (!U.find(out, function (g) { return g.name === 'min'; })) out.splice(Math.min(out.length, 3), 0, minGroup());
+    return out;
+  }
+
+  function minGroup() {
+    return { name: 'min', title: 'Minimum IMDb rating', multi: false, local: true,
+      options: U.map(MIN_CHOICES.slice(1), function (c) { return { value: c[0], label: 'IMDb ' + c[1] }; }) };
+  }
+
+  /* The label of the "nothing chosen" option of a group. */
+  function anyLabel(name, kind) {
+    if (name === 'sort') return kindOf(kind) === 'tv' ? 'Latest' : 'Recently added';
+    return 'Any';
+  }
+
+  function yearLabel(v) {
+    var m = /^(\d{3})0-(\d{3})9$/.exec(v || '');
+    if (m && m[1] === m[2]) return m[1] + '0s';
+    return String(v || '').replace(/^(\d{4})-(\d{4})$/, '$1–$2');
+  }
+
+  function labelOf(groupsList, name, value) {
+    var g = U.find(groupsList || [], function (x) { return x.name === name; });
+    var o = g ? U.find(g.options, function (x) { return x.value === value; }) : null;
+    if (name === 'year') return yearLabel(o ? o.label : value);
+    if (name === 'min') return 'IMDb ' + value + '+';
+    return o ? o.label : value;
+  }
+
+  /* One pill per chosen value, in the sheet's order: [{group, value, label}]. Two or more countries share one pill. */
+  function pills(f, groupsList) {
+    f = norm(f);
+    var out = [];
+    U.each(groupsList, function (g) {
+      var v = f[g.name];
+      if (isArray(v)) {
+        if (g.name === 'country' && v.length > 2) { out.push({ group: g.name, value: '', label: v.length + ' countries' }); return; }
+        U.each(v, function (x) { out.push({ group: g.name, value: x, label: labelOf(groupsList, g.name, x) }); });
+      } else if (v) out.push({ group: g.name, value: v, label: g.name === 'sort' ? (SORT_PILLS[v] || labelOf(groupsList, g.name, v)) : labelOf(groupsList, g.name, v) });
+    });
+    return out;
+  }
+
+  function summary(f, groupsList) { return U.map(pills(f, groupsList), function (p) { return p.label; }).join(' · '); }
+
+  /* ---------- The filter sheet ---------- */
+
+  /* opts: {kind, title, groups, value, focus: groupName, onApply(f)}. Changes show at once in the sheet; they apply
+     when it closes (Back or Show titles). Reset all clears every group and stays open. */
+  function sheet(opts) {
+    var kind = kindOf(opts.kind), list = opts.groups || groups(kind, null);
+    var draft = norm(opts.value), start = key(draft);
+    var s = Overlays.sheet({ name: 'filters', kicker: 'Filter and sort', title: opts.title || (kind === 'tv' ? 'TV Shows' : 'Movies'),
+      hint: 'OK chooses · Back shows the titles' });
+    U.toggleClass(s.box, 'mb-sheet--filters', true);
+    var sub = U.qs(s.box, '.mb-sheet-sub');
+    var acts = Kit.zone(el('div', 'mb-btns mb-filter-acts', null, s.list), 'buttons:filter-acts');
+    Kit.button({ label: 'Show titles', icon: 'check', action: 'filters-apply', parent: acts, primary: true, key: 'filters|apply' }).__run = function () { close(true); };
+    Kit.button({ label: 'Reset all', icon: 'reload', action: 'filters-reset', parent: acts, key: 'filters|reset' }).__run = function () {
+      draft = norm(null);
+      paint();
+    };
+    var chips = [], focusNode = null;
+    U.each(list, function (g) {
+      var head = el('div', 'mb-sheet-label mb-filter-label', g.title, s.list);
+      if (g.local) el('span', 'mb-filter-note', 'Checked on this TV', head);
+      else if (g.multi) el('span', 'mb-filter-note', 'Choose any', head);
+      var row = Kit.zone(el('div', 'mb-chiprow mb-filter-group', null, s.list), 'fgroup:' + g.name);
+      row.setAttribute('data-filter-group', g.name);
+      var all = [{ value: '', label: anyLabel(g.name, kind) }].concat(g.options);
+      U.each(all, function (o) {
+        var c = Kit.chip(g.name === 'year' ? yearLabel(o.label) : o.label, { key: 'f|' + g.name + '|' + o.value, parent: row });
+        c.setAttribute('data-filter', g.name);
+        c.setAttribute('data-value', o.value);
+        c.__run = function () { toggle(g, o.value); };
+        chips.push(c);
+      });
+    });
+
+    function chosen(name, value) {
+      var v = draft[name];
+      if (isArray(v)) return value === '' ? !v.length : U.indexOf(v, value) >= 0;
+      return (v || '') === value;
+    }
+
+    function toggle(g, value) {
+      if (g.multi) {
+        if (value === '') draft[g.name] = [];
+        else {
+          var i = U.indexOf(draft[g.name], value);
+          if (i >= 0) draft[g.name].splice(i, 1); else draft[g.name].push(value);
+        }
+      } else draft[g.name] = value;
+      paint();
+    }
+
+    function paint() {
+      U.each(chips, function (c) {
+        var on = chosen(c.getAttribute('data-filter'), c.getAttribute('data-value'));
+        U.toggleClass(c, 'is-selected', on);
+        if (on && !focusNode) focusNode = c;
+      });
+      var text = summary(draft, list);
+      if (sub) sub.textContent = text || 'Showing everything, newest first';
+    }
+
+    /* The sheet scrolls to keep the focused chip in view, with its group's title when it is on the group's first line. */
+    function reveal(n) {
+      if (!n || !s.port) return;
+      var row = n.parentNode, label = row && row.previousSibling;
+      if (row && U.hasClass(row, 'mb-filter-group') && label && row.firstChild && n.offsetTop === row.firstChild.offsetTop) Kit.reveal(s.list, s.port, label, Kit.em() * 0.5, Kit.em() * 2);
+      Kit.reveal(s.list, s.port, n, Kit.em() * 1.5, Kit.em() * 2);
+    }
+
+    function close(apply) {
+      App.closeLayer('sheet');
+      if (apply && key(draft) !== start && opts.onApply) opts.onApply(norm(draft));
+    }
+
+    paint();
+    var first = opts.focus ? U.qs(s.list, '[data-filter="' + opts.focus + '"].is-selected') || U.qs(s.list, '[data-filter="' + opts.focus + '"]') : null;
+    App.openLayer('sheet', s.layer, {
+      focus: first || U.qs(s.list, '[data-filter-group] .is-selected') || Focus.firstIn(s.list), name: 'filters',
+      onFocus: function (n) { reveal(n); },
+      onBack: function () { close(true); }
+    });
+    return s;
+  }
+
+  /* ---------- People ---------- */
+
+  /* A person result card (round picture or initials, name, "130 movies · 38 shows"). OK opens the person screen. */
+  function personCard(p) {
+    var c = el('div', 'mb-card mb-card--person');
+    Kit.focusable(c, 'grid|' + p.key);
+    c.setAttribute('data-person', p.id);
+    c.__person = p;
+    var art = el('div', 'mb-card-art mb-person-art', null, c);
+    var initials = U.map(String(p.name || '').split(/\s+/).slice(0, 2), function (w) { return w.charAt(0); }).join('').toUpperCase();
+    el('span', 'mb-person-initials', initials, art);
+    if (p.image) Kit.img(p.image, { cls: 'mb-card-img', parent: art, w: 300 });
+    el('div', 'mb-card-title', p.name || '', c);
+    /* "130 movies · 38 shows", wrapping only between the two counts. */
+    var counts = [];
+    if (p.movies > 0) counts.push(p.movies === 1 ? '1\u00a0movie' : p.movies + '\u00a0movies');
+    if (p.shows > 0) counts.push(p.shows === 1 ? '1\u00a0show' : p.shows + '\u00a0shows');
+    if (counts.length) el('div', 'mb-card-sub', counts.join(' · '), c);
+    return c;
+  }
+
+  /* The browse screen's parameters for a person: their movies and their TV shows (the website's actor_works lists),
+     movies first unless they have none. p: {id, name, image?, movies?, shows?, job?} (a search result or a cast entry). */
+  function personParams(p) {
+    var id = String(p.id || '');
+    var movies = Site.url.personWorks(id, 'movie'), shows = Site.url.personWorks(id, 'tv');
+    var counts = [];
+    if (p.movies >= 0) counts.push(p.movies === 1 ? '1 movie' : p.movies + ' movies');
+    if (p.shows >= 0) counts.push(p.shows === 1 ? '1 TV show' : p.shows + ' TV shows');
+    return {
+      url: p.movies === 0 && p.shows > 0 ? shows : movies, title: p.name || 'Person', kicker: p.job || 'Person',
+      tabs: [{ label: 'Movies', href: movies }, { label: 'TV Shows', href: shows }],
+      person: { id: id, name: p.name || '', image: p.image || '', meta: counts.join(' · ') }
+    };
+  }
+
+  /* The search screen's quick browse entry points: [{label, filters}] for genres and years. */
+  function quick(kind) {
+    var spec = null;
+    try { spec = Site.filterSpec(kindOf(kind)); } catch (e) { spec = null; }
+    var genres = [], years = [];
+    var gg = spec ? U.find(spec.groups, function (g) { return g.name === 'genr'; }) : null;
+    U.each(QUICK_GENRES, function (id) {
+      var o = gg ? U.find(gg.options, function (x) { return x.value === id; }) : null;
+      if (o) genres.push({ label: o.label, filters: { genr: [id] } });
+    });
+    U.each(QUICK_YEARS, function (y) { years.push({ label: yearLabel(y), filters: { year: y } }); });
+    return { genres: genres, years: years };
+  }
+
+  return {
+    norm: norm, same: same, isEmpty: isEmpty, load: load, save: save, url: url, groups: groups, pills: pills,
+    summary: summary, labelOf: labelOf, yearLabel: yearLabel, sheet: sheet, personCard: personCard,
+    personParams: personParams, quick: quick
   };
 }());
 /* ---- 50-ui-overlays.js ---- */
@@ -6459,7 +7286,8 @@ var NativePlayer = (function () {
   var CFG = {
     requestTimeout: 15000, retryDelay: 700, candidateTimeout: 15000, stallTimeout: 15000, osdHide: 4000,
     progressEvery: 20000, seekApply: 400, seekReport: 1500, upNextLead: 25, upNextCount: 10, chipMs: 6000,
-    startBudget: 60000, stillWatchingAfter: 3, repeatGap: 250, subTimeout: 15000
+    startBudget: 90000, stillWatchingAfter: 3, repeatGap: 250, subTimeout: 15000, candidateMax: 40000, audioTimeout: 8000,
+    audioVerify: 1500, seekSlack: 8, hlsLoadTimeout: 10000, audioSwitchTimeout: 10000
   };
   /* Held keys act once (the App's hold guard also swallows held OK/Back, including repeats that arrive after the
      player closed); arrows and FF/RW keep auto-repeat for seeking and sheet navigation. */
@@ -6468,7 +7296,7 @@ var NativePlayer = (function () {
   var JW_FLAG = 'jw' + 'player=1'; /* the website's own "player data" flag (split so the site-globals lint scan skips it) */
   var FORM = 'application/x-www-form-urlencoded; charset=UTF-8';
   var MIME = { h264: 'video/mp4; codecs="avc1.640028"', hvc1: 'video/mp4; codecs="hvc1.1.6.L150.B0"', hev1: 'video/mp4; codecs="hev1.1.6.L150.B0"' };
-  var SHEET_ORDER = ['AUTO', '1080p', '720p', '480p', '360p', 'ORG'];
+  var SHEET_ORDER = ['AUTO', '4K', '2160p', '1440p', '1080p', '720p', '480p', '360p', 'ORG'];
 
   var gen = 0;        /* bumped by every session start and stop: callbacks from older sessions are dropped */
   var S = null;       /* the current session (one movie or one episode) */
@@ -6491,6 +7319,7 @@ var NativePlayer = (function () {
     back: '<path d="M10.9 5.2L4.1 12l6.8 6.8 1.7-1.7-3.9-3.9H20v-2.4H8.7l3.9-3.9z"/>',
     close: '<path d="M6.3 4.6L12 10.3l5.7-5.7 1.7 1.7-5.7 5.7 5.7 5.7-1.7 1.7-5.7-5.7-5.7 5.7-1.7-1.7 5.7-5.7-5.7-5.7z"/>',
     reload: '<path d="M12 4.2c2.2 0 4.2.9 5.6 2.4L20 4.2V11h-6.8l2.9-2.9A5.7 5.7 0 0 0 6.4 12H4.2A7.8 7.8 0 0 1 12 4.2zm7.8 7.8A7.8 7.8 0 0 1 6.4 17.4L4 19.8V13h6.8l-2.9 2.9a5.7 5.7 0 0 0 9.7-3.9z"/>',
+    audio: '<path d="M4 9.2h3.6L12.4 5c.6-.5 1.6-.1 1.6.7v12.6c0 .8-1 1.2-1.6.7l-4.8-4.2H4c-.6 0-1-.4-1-1v-3.6c0-.6.4-1 1-1zm12.1-1.6a6.4 6.4 0 0 1 0 8.8l-1.3-1.3a4.6 4.6 0 0 0 0-6.2zm2.6-2.6a10.1 10.1 0 0 1 0 14l-1.3-1.3a8.3 8.3 0 0 0 0-11.4z"/>',
     subtitles: '<path fill-rule="evenodd" d="M4.2 4.5h15.6c.7 0 1.2.5 1.2 1.2v12.6c0 .7-.5 1.2-1.2 1.2H4.2c-.7 0-1.2-.5-1.2-1.2V5.7c0-.7.5-1.2 1.2-1.2zM5.2 6.7v10.6h13.6V6.7zM6.8 11.4h4.8v1.9H6.8zm6.2 0h4.2v1.9H13zm-6.2 3h7.4v1.9H6.8zm8.6 0h1.8v1.9h-1.8z"/>'
   };
 
@@ -6596,7 +7425,10 @@ var NativePlayer = (function () {
     };
   }
 
-  function environment() { var tv = isTV(); return { tv: tv, aac: needsAac(tv), canPlay: canPlayProbe(), prefer: tv ? tvOrder : '' }; }
+  function environment(file) {
+    var tv = isTV();
+    return { tv: tv, aac: needsAac(tv), mse: mse(), canPlay: canPlayProbe(), prefer: tv ? tvOrder : '', fileName: file && file.file || '', fileSize: file && file.size || '' };
+  }
 
   /* configure({tvOrder: 'ORG,AUTO'}): on a TV, try these stream labels first, in this order (the rest keep theirs).
      For measuring start times on a TV from the remote inspector; '' (default) keeps the built-in order. */
@@ -6613,6 +7445,285 @@ var NativePlayer = (function () {
   /* The app is in the background (Home button, input switch, another app on top). */
   function isHidden() {
     try { return !!document.hidden || document.visibilityState === 'hidden' || !!document.webkitHidden; } catch (e) { return false; }
+  }
+
+  /* ---------- hls.js: HLS through Media Source Extensions (docs/PLAYER.md "HLS engine") ----------
+     Samsung's Tizen 9 web view (Chromium 120) refuses HLS in <video> (media error 4) but has MSE, so HLS plays there
+     through hls.js, as the website's own JW Player does. hls.js is third-party code loaded at run time, once and only
+     when needed: the site's own copy first (same origin, usually cached), then a pinned CDN copy. It is never part of
+     tv.js. The verdict "the platform player refuses HLS, hls.js plays it" is remembered per user agent, so later
+     starts go straight to hls.js. */
+
+  var HLS_SITE = '/static/videojs/hls.min.js'; /* the site's own copy: hls.js 1.4.0 (verified 2026-10-20) */
+  var hlsCdn = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js';
+  var hlsMode = 'auto';                        /* configure({hlsEngine}): 'auto' | 'hlsjs' | 'native' */
+  var HLS_VERDICT = 'mbptv:hls-engine:v1';
+  var HLS_MIME = 'application/vnd.apple.mpegurl';
+  var lib = { state: '', Hls: null, from: '', version: '', waiters: [], failedAt: 0 };
+  var hlsCur = null; /* the hls.js instance attached to the video: {hls, H, s, tryId, c, recovered, ...} */
+
+  function mediaSource() { try { return window.MediaSource || window.WebKitMediaSource || null; } catch (e) { return null; } }
+  function mse() { var MS = mediaSource(); return !!(MS && typeof MS.isTypeSupported === 'function'); }
+  function mseType(type) { try { var MS = mediaSource(); return !!(MS && MS.isTypeSupported(type)); } catch (e) { return false; } }
+
+  function usableHls(H) {
+    try { return typeof H === 'function' && typeof H.isSupported === 'function' && !!H.isSupported() && !!H.Events; } catch (e) { return false; }
+  }
+
+  function libDone(H, from, t0) {
+    lib.state = 'ready';
+    lib.Hls = H;
+    lib.from = from;
+    lib.version = String(H.version || '?').slice(0, 24);
+    Log.info('player', 'hls.js ' + lib.version + ' ready (' + from + ', ' + ((U.now() - t0) / 1000).toFixed(1) + ' s; MSE ec-3 ' +
+      (mseType('audio/mp4; codecs="ec-3"') ? 'yes' : 'no') + ', hevc ' + (mseType('video/mp4; codecs="hvc1.2.4.L150.B0"') ? 'yes' : 'no') + ')');
+    libFlush(null);
+  }
+
+  function libFail(why) {
+    lib.state = 'failed';
+    lib.failedAt = U.now();
+    Log.warn('player', 'hls.js unavailable (' + why + '): HLS through the platform player only');
+    libFlush('unavailable');
+  }
+
+  function libFlush(err) {
+    var list = lib.waiters;
+    lib.waiters = [];
+    U.each(list, function (cb) { try { cb(err, err ? null : lib.Hls); } catch (e) { Log.error('player-hls-lib', e); } });
+  }
+
+  /* No copy loaded: HLS stays with the platform player; loading is tried again after 5 minutes. */
+  function libFailed() {
+    if (lib.state === 'failed' && U.now() - lib.failedAt > 300000) lib.state = '';
+    return lib.state === 'failed';
+  }
+
+  /* cb(err, Hls): hls.js, loaded once (site copy, then the CDN copy), each try limited to hlsLoadTimeout. */
+  function hlsReady(cb) {
+    if (libFailed()) { cb('unavailable', null); return; }
+    if (lib.state === 'ready') { cb(null, lib.Hls); return; }
+    lib.waiters.push(cb);
+    if (lib.state === 'loading') return;
+    lib.state = 'loading';
+    var t0 = U.now();
+    if (usableHls(window.Hls)) { libDone(window.Hls, 'page copy', t0); return; }
+    var list = [{ url: Site.resolve(HLS_SITE, origin() + '/'), from: 'site copy' }];
+    if (hlsCdn) list.push({ url: hlsCdn, from: 'CDN copy' });
+    function attempt(i) {
+      if (i >= list.length) { libFail(list.length > 1 ? 'no copy loaded' : 'the site copy did not load'); return; }
+      var tag = document.createElement('script'), done = false, timer = null;
+      function end(ok, why) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        tag.onload = null;
+        tag.onerror = null;
+        if (ok && usableHls(window.Hls)) { libDone(window.Hls, list[i].from, t0); return; }
+        Log.warn('player', 'hls.js ' + list[i].from + ': ' + (ok ? (window.Hls ? 'not supported here' : 'loaded but not visible to the module') : why));
+        attempt(i + 1);
+      }
+      tag.onload = U.guard(function () { end(true, ''); }, 'player-hls-load');
+      tag.onerror = U.guard(function () { end(false, 'did not load'); }, 'player-hls-load');
+      timer = setTimeout(function () { end(false, 'timed out'); }, CFG.hlsLoadTimeout);
+      tag.async = true;
+      tag.setAttribute('data-mbptv', 'hls');
+      tag.src = list[i].url;
+      (document.head || document.documentElement).appendChild(tag);
+    }
+    attempt(0);
+  }
+
+  function verdict() {
+    var v = Store.local.get(HLS_VERDICT, null);
+    return v && typeof v === 'object' && v.ua === String(navigator.userAgent || '') ? String(v.native || '') : '';
+  }
+
+  /* 'native' (the platform player) or 'hlsjs' for this candidate. */
+  function engineFor(c) {
+    if (!c || !c.hls || c.synthetic || /^data:/i.test(String(c.src || ''))) return 'native';
+    if (c.engine) return c.engine;
+    if (hlsMode === 'native' || !mse() || libFailed()) return 'native';
+    if (hlsMode === 'hlsjs' || verdict() === 'refuses') return 'hlsjs';
+    return canPlayProbe()(HLS_MIME) ? 'native' : 'hlsjs';
+  }
+
+  /* After the platform player refused an HLS stream outright, the same stream is tried through hls.js. */
+  function hlsRetryOk() { return hlsMode !== 'native' && mse() && !libFailed(); }
+
+  function destroyHls() {
+    var h = hlsCur;
+    hlsCur = null;
+    if (!h) return;
+    h.dead = true;
+    try { h.hls.destroy(); } catch (e) { Log.info('player', 'hls.js destroy: ' + clean(e)); }
+  }
+
+  function hlsOf(s) { var h = hlsCur; return h && !h.dead && h.s === s && h.tryId === s.tryId ? h : null; }
+
+  /* '4K', '1080p', ... from a level's size (wide films: 1920x800 is 1080p, 2580x1080 too). */
+  function levelName(l) {
+    var w = l && +l.width || 0, ht = l && +l.height || 0;
+    if (!w && !ht) return l && l.bitrate ? Math.round(l.bitrate / 1000) + ' kbps' : '';
+    return w >= 3200 || ht >= 1800 ? '4K' : w >= 1800 || ht >= 1000 ? '1080p' : w >= 1200 || ht >= 700 ? '720p' : w >= 800 || ht >= 460 ? '480p' : '360p';
+  }
+
+  function levelCodec(l) { return String(l && (l.videoCodec || (l.attrs && l.attrs.CODECS)) || ''); }
+  function hevcLevel(l) { return /(?:^|,)\s*(?:hvc1|hev1)/i.test(levelCodec(l)); }
+
+  function hlsLevelNow(h) {
+    var levels = [], i = -1;
+    try { levels = h.hls.levels || []; i = h.hls.currentLevel; } catch (e) { levels = []; }
+    if (!(i >= 0)) i = h.level;
+    return i >= 0 && levels[i] ? levelName(levels[i]) : '';
+  }
+
+  /* AUTO lists the 4K HEVC HDR rendition first: hls.js would start there. Adaptive playback stays on H.264 (the best
+     rendition up to 1080p to start, the best H.264 one at most); 4K is the Quality menu's own choice. */
+  function hlsLevels(h, d) {
+    var levels = d && d.levels || [], hevc = 0, cap = -1, start = -1, i;
+    try { if (!levels.length) levels = h.hls.levels || []; } catch (e) { levels = []; }
+    for (i = 0; i < levels.length; i++) {
+      if (hevcLevel(levels[i])) { hevc++; continue; }
+      cap = i;
+      if ((+levels[i].height || 0) <= 1100) start = i;
+    }
+    if (start < 0) start = cap;
+    var names = U.map(levels, function (l) { return levelName(l) + (hevcLevel(l) ? ' HEVC' : ''); });
+    if (levels.length > 1) {
+      try {
+        if (hevc && cap >= 0) h.hls.autoLevelCapping = cap;
+        if (start >= 0) h.hls.startLevel = start;
+      } catch (e2) { Log.info('player', 'hls.js levels: ' + clean(e2)); }
+    }
+    Log.info('player', 'hls.js: ' + levels.length + (levels.length === 1 ? ' level' : ' levels') + ' [' + names.join(', ') + ']' +
+      (levels.length > 1 && start >= 0 ? ', start ' + names[start] : '') + (levels.length > 1 && hevc && cap >= 0 ? ', HEVC kept for the Quality menu' : ''));
+  }
+
+  function hlsAttach(s, c, H, at, tryId) {
+    var v = ui.video;
+    try { v.removeAttribute('src'); v.load(); } catch (e) {}
+    /* Load from the start position directly (no first segment at 0); a resume outside the resume rules is moved back
+       to 0 at loadedmetadata. */
+    var start = at > 0 && !(s.resumePending && !(at > 10)) ? at : -1;
+    var cfg = {
+      startPosition: start, autoStartLoad: true, enableWorker: true, capLevelToPlayerSize: false, debug: false,
+      backBufferLength: 30, maxBufferLength: 30, maxMaxBufferLength: 60, maxBufferSize: 60 * 1000 * 1000,
+      manifestLoadingTimeOut: 10000, manifestLoadingMaxRetry: 1, levelLoadingTimeOut: 10000, levelLoadingMaxRetry: 2,
+      fragLoadingTimeOut: 20000, fragLoadingMaxRetry: 3
+    };
+    var hls = null;
+    try { hls = new H(cfg); } catch (e2) { s.failNote = 'hls.js: ' + clean(e2); candidateFailed(s, tryId, 'hls-other'); return; }
+    var h = { hls: hls, H: H, s: s, tryId: tryId, c: c, recovered: 0, level: -1, nonFatal: 0, levelLogs: 0, reported: false, audioWant: null, prefDone: false, stopped: false, dead: false };
+    hlsCur = h;
+    var E = H.Events || {};
+    function on(name, fn) {
+      if (!E[name]) return;
+      hls.on(E[name], function (evt, data) {
+        if (hlsCur !== h || h.dead || s !== S || s.finished || s.tryId !== tryId || s.state === 'error') return;
+        try { fn(data || {}); } catch (err) { Log.error('player-hls:' + name, err); }
+      });
+    }
+    on('MANIFEST_PARSED', function (d) { alive(s); hlsLevels(h, d); playVideo(s); });
+    on('LEVEL_LOADED', function () { alive(s); });
+    on('FRAG_LOADED', function () { alive(s); });
+    on('FRAG_BUFFERED', function () { alive(s); });
+    on('LEVEL_SWITCHED', function (d) { hlsLevelSwitched(h, d.level); });
+    on('AUDIO_TRACKS_UPDATED', function () { hlsAudioPref(h); if (s.ready) audioRefresh(s); });
+    on('AUDIO_TRACK_SWITCHED', function (d) { hlsAudioSwitched(h, d.id); });
+    on('ERROR', function (d) { hlsError(h, d); });
+    hls.attachMedia(v);
+    hls.loadSource(c.src);
+  }
+
+  function hlsLevelSwitched(h, index) {
+    h.level = index;
+    if (!h.reported || h.levelLogs >= 12) return;
+    h.levelLogs++;
+    var name = hlsLevelNow(h);
+    if (name) Log.info('player', 'hls.js level ' + name);
+  }
+
+  /* Fatal hls.js errors end the candidate (the usual fallback order follows); a media error is recovered once first. */
+  function hlsError(h, d) {
+    var s = h.s, T = h.H.ErrorTypes || {}, type = String(d.type || ''), det = String(d.details || '').slice(0, 60);
+    var code = d.response && d.response.code ? toInt(d.response.code) : 0;
+    var desc = 'hls.js ' + type + '/' + det + (code ? ' http ' + code : '');
+    if (!d.fatal) {
+      h.nonFatal++;
+      if (h.nonFatal <= 3) Log.info('player', desc + ' (hls.js retries)');
+      return;
+    }
+    var media = type === (T.MEDIA_ERROR || 'mediaError'), codecs = /IncompatibleCodecs|AddCodecError/i.test(det);
+    if (media && !codecs && h.recovered < 1) {
+      h.recovered++;
+      Log.warn('player', desc + ': recovering once');
+      try { h.hls.recoverMediaError(); } catch (e) { Log.warn('player', 'hls.js recover: ' + clean(e)); }
+      return;
+    }
+    var reason = type === (T.NETWORK_ERROR || 'networkError') ? (/TimeOut/i.test(det) ? 'timeout' : 'hls-network') :
+      media ? (codecs ? 'hls-format' : 'hls-media') : 'hls-other';
+    s.failNote = desc;
+    candidateFailed(s, h.tryId, reason);
+  }
+
+  /* The video element reported an error while hls.js feeds it: recover once, as hls.js recommends. */
+  function hlsMediaError(s, h, code) {
+    if (h.recovered < 1) {
+      h.recovered++;
+      Log.warn('player', 'media error ' + code + ' under hls.js: recovering once');
+      try { h.hls.recoverMediaError(); } catch (e) { Log.warn('player', 'hls.js recover: ' + clean(e)); }
+      return;
+    }
+    s.failNote = 'hls.js media error ' + code;
+    candidateFailed(s, s.tryId, 'media-' + code);
+  }
+
+  function hlsAudioTracks(h) { try { var t = h.hls.audioTracks; return t && typeof t.length === 'number' ? t : []; } catch (e) { return []; } }
+  function hlsAudioIndex(h) { try { var i = h.hls.audioTrack; return typeof i === 'number' ? i : -1; } catch (e) { return -1; } }
+
+  function hlsAudioCode(h) {
+    var t = hlsAudioTracks(h), i = hlsAudioIndex(h), x = i >= 0 ? t[i] : null;
+    return x ? (langCode(x.lang) || langCode(String(x.name || '').split(/[\s(#]/)[0]) || U.text(x.name || x.lang || '')).slice(0, 12) : '';
+  }
+
+  /* The remembered audio language (Prefs audioLang), chosen as soon as hls.js knows the tracks: no switch later. */
+  function hlsAudioPref(h) {
+    var s = h.s;
+    if (h.prefDone || !hlsAudioTracks(h).length) return;
+    h.prefDone = true;
+    var want = prefAudio();
+    if (!want) return;
+    s.audio.prefTry = s.tryId; /* decided here, not again in audioRefresh */
+    /* Next tick: hls.js picks its initial track right after this event (1.4 would undo an earlier choice, and the
+       track playing is only known then). */
+    U.later(function () {
+      if (hlsCur !== h || h.dead || s !== S || s.finished) return;
+      var o = audioPost('hlsjs', hlsAudioRaw(h)), at = o ? audioMatch(o, want) : -1, it = at >= 0 ? o.items[at] : null;
+      if (!it || it.index === hlsAudioIndex(h)) return;
+      Log.info('player', 'audio: the remembered language (' + want + ') from the start, via hls.js');
+      h.audioWant = { index: it.index, title: it.title, how: 'auto' };
+      try { h.hls.audioTrack = it.index; } catch (e) { Log.warn('player', 'audio: ' + clean(e)); }
+    }, 0, 'player-hls-audio');
+  }
+
+  function hlsAudioSwitched(h, id) {
+    var s = h.s, w = h.audioWant;
+    if (w && w.index === id) {
+      h.audioWant = null;
+      cancel(s, 'audioverify');
+      Log.info('player', 'audio: switched');
+      if (w.how === 'user') showChip(s, 'Audio: ' + w.title, 2500, false);
+    }
+    if (s.ready) audioRefresh(s);
+  }
+
+  /* Background: hls.js stops loading while the app is hidden and carries on from the position when it comes back. */
+  function hlsPause(s, stop) {
+    var h = hlsOf(s);
+    if (!h || h.stopped === stop) return;
+    h.stopped = stop;
+    try { if (stop) h.hls.stopLoad(); else h.hls.startLoad(ui.video.currentTime || -1); } catch (e) { Log.info('player', 'hls.js ' + (stop ? 'stop' : 'start') + ': ' + clean(e)); }
   }
 
   /* ---------- player data parsing (regexes only; never evaluated) ---------- */
@@ -6940,7 +8051,12 @@ var NativePlayer = (function () {
 
   /* ---------- stream order ---------- */
 
-  function rank(label) { var m = /(\d{3,4})p/i.exec(String(label || '')); return m ? toInt(m[1]) : 0; }
+  /* Fixed rendition labels: '1080p' -> 1080, '4K' -> 2160 (4K files add a '4K' HEVC HDR rendition); 0 = not fixed. */
+  function rank(label) {
+    var l = String(label || ''), m = /(\d{3,4})p/i.exec(l);
+    if (m) return toInt(m[1]);
+    return /^8k$/i.test(l) ? 4320 : /^4k$/i.test(l) ? 2160 : 0;
+  }
 
   function withAac(u) {
     u = String(u || '');
@@ -6956,32 +8072,62 @@ var NativePlayer = (function () {
     return !!cp(MIME.h264);
   }
 
-  /* TV: AUTO HLS, then the MP4 files (ORG first), then the fixed HLS renditions from the highest down.
-     Elsewhere: MP4s the browser says it can decode, AUTO, fixed HLS, then the remaining MP4s as a last resort. */
+  function pathOf(u) { var m = /^[a-z]+:\/\/[^\/?#]*([^?#]*)/i.exec(String(u || '')); return m ? m[1] : ''; }
+
+  /* The site's placeholder for accounts without VIP (its player checks for it too). */
+  function vipOnly(s) { return /\/video\/vip_only\.mp4$/i.test(pathOf(s.src)); }
+
+  /* Size in GB from the file list's "14.7 GB" text (0 when unknown). */
+  function sizeGb(v) {
+    var m = /([\d.]+)\s*(KB|MB|GB|TB)/i.exec(String(v || ''));
+    if (!m) return 0;
+    var n = num(m[1]), u = m[2].toUpperCase();
+    return u === 'TB' ? n * 1024 : u === 'GB' ? n : u === 'MB' ? n / 1024 : n / 1048576;
+  }
+
+  /* How an original file is likely to fare in a TV's built-in player (docs/PLAYER.md "Stream order"):
+     'risky' = Matroska whose name says DTS or TrueHD audio (Samsung and LG TVs do not decode them: no sound or an
+     error) or a file heavier than 20 GB (4K remuxes run at 60-90 Mbit/s and stall on home Wi-Fi); 'mkv' = other
+     Matroska files (usually EAC3/AC3/AAC, which TVs decode, but the container is less certain than MP4); 'mp4'. */
+  function fileKind(s, env) {
+    var mkv = /\.mkv$/i.test(pathOf(s.src)), name = String(env && env.fileName || '');
+    if (sizeGb(env && env.fileSize) > 20) return 'risky';
+    if (mkv && /(?:^|[^a-z])(?:DTS|TrueHD)(?:[^a-z]|$)/i.test(name)) return 'risky';
+    return mkv ? 'mkv' : 'mp4';
+  }
+
+  /* TV: AUTO HLS (what the website itself plays on Samsung/LG TVs), then an MP4 original, then the 1080p HLS, then a
+     Matroska original, the lower HLS renditions, the 4K HLS, and last an original the TV probably cannot play. With
+     Media Source Extensions (env.mse: hls.js can play every HLS rendition) Matroska originals come after the HLS ones.
+     Elsewhere: originals the browser says it can decode, AUTO, fixed HLS (highest first), then the other originals.
+     The site's VIP placeholder is never a candidate. env.fileName / env.fileSize describe the file (risk rules). */
   function order(sources, env) {
     env = env || environment();
-    var auto = [], org = [], mp4 = [], fixed = [], other = [];
+    var auto = [], files = [], fixed = [], other = [];
     U.each(sources || [], function (s) {
-      if (!s || !s.src) return;
+      if (!s || !s.src || vipOnly(s)) return;
       if (s.hls && s.label === 'AUTO') auto.push(s);
       else if (s.hls && rank(s.label)) fixed.push(s);
-      else if (!s.hls && s.label === 'ORG') org.push(s);
-      else if (!s.hls) mp4.push(s);
+      else if (!s.hls) files.push(s);
       else other.push(s);
     });
     fixed.sort(function (a, b) { return rank(b.label) - rank(a.label); });
-    mp4 = org.concat(mp4);
+    files.sort(function (a, b) { return (a.label === 'ORG' ? 0 : 1) - (b.label === 'ORG' ? 0 : 1); });
     var list;
-    if (env.tv) list = auto.concat(mp4, fixed, other);
-    else {
+    if (env.tv) {
+      var mp4 = [], mkv = [], risky = [], hd = [], uhd = [];
+      U.each(files, function (s) { var k = fileKind(s, env); (k === 'mp4' ? mp4 : k === 'mkv' ? mkv : risky).push(s); });
+      U.each(fixed, function (s) { (rank(s.label) > 1080 ? uhd : hd).push(s); });
+      list = env.mse ? auto.concat(mp4, hd, uhd, other, mkv, risky) : auto.concat(mp4, hd.slice(0, 1), mkv, hd.slice(1), uhd, other, risky);
+    } else {
       var yes = [], no = [];
-      U.each(mp4, function (s) { if (playable(s, env)) yes.push(s); else no.push(s); });
+      U.each(files, function (s) { if (playable(s, env) && fileKind(s, env) !== 'risky') yes.push(s); else no.push(s); });
       list = yes.concat(auto, fixed, other, no);
     }
     list = preferred(list, env.prefer);
     return U.map(list, function (s) {
       return { label: s.label, src: s.hls && env.aac ? withAac(s.src) : s.src, hls: !!s.hls, h265: !!s.h265, hdr: !!s.hdr,
-        width: s.width || 0, height: s.height || 0, fps: s.fps || 0 };
+        width: s.width || 0, height: s.height || 0, fps: s.fps || 0, kind: s.hls ? 'hls' : fileKind(s, env) };
     });
   }
 
@@ -7079,6 +8225,13 @@ var NativePlayer = (function () {
       introEnd: 0, creditsAt: 0, osd: false, area: 'scrub', btn: 'play-pause', btnSig: '', seek: null, seekKey: null,
       upnext: null, dismissedNext: false, nextInfo: null, nextFetching: false, sheet: null, err: null, chipStartOver: false,
       buffering: false, waitAt: 0, switchNote: '', bgPaused: false, ended: false, lastRender: 0, timers: {}, reqs: [], offs: [], finished: false,
+      /* fails: what each candidate of the current player data did ([{label, reason}], for the error card); switching:
+         a quality the viewer chose, verified when something plays; seekCheck: a position that must be reached */
+      fails: [], candStart: 0, lastBuf: 0, switching: null, seekCheck: null,
+      /* engine: 'native' (the platform player) or 'hlsjs' for the current candidate; failNote: detail for its failure log */
+      engine: 'native', failNote: '',
+      /* audio languages: method 'tracks' (video.audioTracks) or 'manifest' (a rewritten HLS master), the master's list */
+      audio: { master: null, fetching: '', unread: '', prefTry: -1, pending: null },
       /* subtitles: the site's list, the chosen file (sel), its cues once loaded, a load sequence and a per-session cache */
       subs: { langs: [], sel: null, cues: null, delay: 0, seq: 0, loading: 0, cache: {}, sig: '', decided: false, note: '' }
     };
@@ -7160,8 +8313,10 @@ var NativePlayer = (function () {
       s.files = html ? filesIn(U.parseHTML('<ul>' + html + '</ul>')) : [];
       Log.info('player', 'episode files ' + s.files.length);
       if (!s.files.length) { showError(s, 'no-files', 'This episode has no playable files yet.'); return; }
-      s.fileIndex = 0;
-      loadPlayer(s, 0);
+      /* The first file, unless a file was asked for (Try another file, the quality sheet's files). */
+      var fi = parseInt(s.req.fileIndex, 10);
+      s.fileIndex = !isNaN(fi) && fi >= 0 && fi < s.files.length ? fi : 0;
+      loadPlayer(s, s.fileIndex);
     }, 'player-tv-file'));
   }
 
@@ -7194,6 +8349,11 @@ var NativePlayer = (function () {
         }
         return;
       }
+      if (!U.find(d.sources, function (x) { return !vipOnly(x); })) {
+        Log.warn('player', 'player data: VIP placeholder only');
+        showError(s, 'site-error', 'This title needs a MovieBox Pro VIP account. The website can tell you more.');
+        return;
+      }
       mark(s, 'data');
       applyData(s, d);
       var at = s.resumeAt > 0 ? s.resumeAt : d.seconds;
@@ -7223,9 +8383,13 @@ var NativePlayer = (function () {
     s.next = s.kind === 'tv' && d.next ? d.next : null;
     s.introEnd = d.skips.start > 0 ? d.skips.start : 0;
     s.creditsAt = d.skips.end > 0 ? d.skips.end : 0;
-    s.cands = order(d.sources, environment());
+    s.cands = order(d.sources, environment(s.files[s.fileIndex]));
     s.base = s.cands.slice();
     s.failed = {};
+    s.fails = [];
+    s.switching = null;
+    s.audio.master = null;
+    s.audio.pending = null;
     if (!s.started) s.lastSent = Math.floor(d.seconds) + ':0';
     renderTitles(s);
     s.btnSig = '';
@@ -7263,8 +8427,10 @@ var NativePlayer = (function () {
     return {
       kind: s.kind, id: s.id, season: s.season, episode: s.episode, time: Math.round(pos(s) * 10) / 10,
       duration: Math.round(d * 10) / 10, paused: paused(), stream: c ? (c.hls ? 'hls' : 'mp4') : '', label: c ? c.label : '',
+      engine: c ? (s.engine === 'hlsjs' ? 'hls.js' : 'native') : '', level: hlsOf(s) ? hlsLevelNow(hlsOf(s)) : '',
       state: s.state, started: s.started, file: s.fileIndex,
-      subtitle: s.subs && s.subs.sel && s.subs.cues ? subLabel(s, s.subs.sel.li, s.subs.sel.fi) : ''
+      subtitle: s.subs && s.subs.sel && s.subs.cues ? subLabel(s, s.subs.sel.li, s.subs.sel.fi) : '',
+      audio: s.ready && ui ? audioCurrent(audioOptions(s)) : ''
     };
   }
 
@@ -7282,33 +8448,71 @@ var NativePlayer = (function () {
   function marksText(s) {
     var m = s.marks || {}, out = [];
     U.each(['data', 'src', 'meta', 'seek', 'seeked', 'canplay'], function (k) { if (m.hasOwnProperty(k)) out.push(k + ' ' + (m[k] / 1000).toFixed(1)); });
-    if (s.ci > 0) out.push('stream ' + (s.ci + 1) + ' of ' + s.cands.length);
+    /* hls.js retries of a stream the platform player refused count as that stream */
+    var n = 0, at = 0;
+    U.each(s.cands, function (c, i) { if (!c.afterNative) n++; if (i <= s.ci && !c.afterNative) at = n; });
+    if (at > 1) out.push('stream ' + at + ' of ' + n);
+    if (s.engine === 'hlsjs') out.push('hls.js');
     return out.join(', ');
   }
 
   function startCandidate(s, i, at, why) {
-    cancel(s, 'cand'); cancel(s, 'stall');
+    cancel(s, 'cand'); cancel(s, 'candmax'); cancel(s, 'stall');
     var c = s.cands[i];
     if (!c) { streamsFailed(s, at); return; }
-    s.ci = i; s.ready = false; s.pendingAt = at > 0 ? at : 0; s.tryId++; s.userPaused = false;
-    var tryId = s.tryId;
-    Log.info('player', 'try ' + c.label + ' (' + (c.hls ? 'hls' : 'mp4') + ')' + (at > 0 ? ' at ' + Math.round(at) : '') + (why ? ' after ' + why : ''));
+    s.ci = i; s.ready = false; s.pendingAt = at > 0 ? at : 0; s.tryId++; s.userPaused = false; s.failNote = '';
+    var tryId = s.tryId, engine = engineFor(c);
+    s.engine = engine;
+    Log.info('player', 'try ' + c.label + ' (' + (c.hls ? (engine === 'hlsjs' ? 'hls.js' : 'hls') : 'mp4') + ')' + (at > 0 ? ' at ' + Math.round(at) : '') + (why ? ' after ' + why : ''));
     if (!s.started) setStatus(s, i === 0 ? 'Starting playback\u2026' : 'Trying another stream\u2026');
     else setBuffering(s, true);
     var v = ui.video;
+    destroyHls();
     try { v.pause(); } catch (e) {}
     mark(s, 'src');
-    try { v.src = c.src; v.load(); } catch (e2) { candidateFailed(s, tryId, 'exception'); return; }
-    playVideo(s);
+    if (engine === 'hlsjs') {
+      hlsReady(safe(s, function (err, H) {
+        if (s.tryId !== tryId || s.state === 'error') return;
+        if (err || !H) {
+          /* No hls.js here: a stream the platform player already refused fails as it did; others play natively. */
+          s.engine = 'native';
+          if (c.afterNative) { s.failNote = 'hls.js unavailable'; candidateFailed(s, tryId, c.nativeReason || 'media-4'); return; }
+          nativeSrc(s, c, tryId);
+          return;
+        }
+        alive(s);
+        hlsAttach(s, c, H, at, tryId);
+      }, 'player-hls'));
+    } else if (!nativeSrc(s, c, tryId)) return;
     armCandidate(s);
     renderBadges(s);
     s.btnSig = '';
   }
 
-  /* Each candidate must reach "playing" within candidateTimeout. Metadata alone is not enough: an HLS manifest can
-     load while its segments hang or are refused. Not while autoplay is blocked (waiting for OK), nor when the
-     viewer paused a stream that has loaded. */
+  function nativeSrc(s, c, tryId) {
+    var v = ui.video;
+    try { v.src = c.src; v.load(); } catch (e) { candidateFailed(s, tryId, 'exception'); return false; }
+    playVideo(s);
+    return true;
+  }
+
+  /* Each candidate must reach "playing". Metadata alone is not enough: an HLS manifest can load while its segments
+     hang or are refused. A candidate fails after candidateTimeout without any sign of life (metadata, data, seeked,
+     canplay, more buffered: see alive()), and after candidateMax in any case, so a slow start that keeps progressing
+     (a resume seek on a TV takes 5-10 s) is not thrown away. Not while autoplay is blocked (waiting for OK), nor
+     when the viewer paused a stream that has loaded. */
   function armCandidate(s) {
+    var tryId = s.tryId;
+    s.candStart = U.now();
+    s.lastBuf = 0;
+    armQuiet(s);
+    later(s, 'candmax', function () {
+      if (s.tryId !== tryId || s.playedTry === tryId || s.blocked || (s.ready && s.userPaused)) return;
+      candidateFailed(s, tryId, s.ready ? 'no-start' : 'timeout');
+    }, CFG.candidateMax);
+  }
+
+  function armQuiet(s) {
     var tryId = s.tryId;
     later(s, 'cand', function () {
       if (s.tryId !== tryId || s.playedTry === tryId || s.blocked || (s.ready && s.userPaused)) return;
@@ -7316,17 +8520,61 @@ var NativePlayer = (function () {
     }, CFG.candidateTimeout);
   }
 
+  /* A starting candidate showed a sign of life: its quiet-time limit starts again. */
+  function alive(s) {
+    if (s.playedTry === s.tryId || !s.timers.cand || s.state === 'error') return;
+    armQuiet(s);
+  }
+
+  /* Format errors: the platform player rejected the stream itself (not the network). */
+  function formatError(reason) { return /^media-[34]$|^play-NotSupported|^hls-format$/.test(String(reason || '')); }
+
   function candidateFailed(s, tryId, reason) {
     if (s !== S || s.finished || s.tryId !== tryId || s.state === 'error' || s.relinking) return;
-    var c = s.cands[s.ci];
-    Log.warn('player', 'stream ' + (c ? c.label : '?') + ' failed: ' + reason);
-    if (c) s.failed[c.label] = true;
+    var c = s.cands[s.ci], note = s.failNote, viaHls = s.engine === 'hlsjs';
+    s.failNote = '';
+    Log.warn('player', 'stream ' + (c ? c.label + (c.synthetic ? ' (audio)' : '') + (viaHls ? ' [hls.js]' : '') : '?') + ' failed: ' + reason +
+      (c ? ' after ' + ((U.now() - s.candStart) / 1000).toFixed(1) + ' s' : '') + (note ? ' (' + clean(note) + ')' : '') + mediaState());
     var v = ui.video, at = s.ready ? (v.currentTime > 0 ? v.currentTime : s.lastTime) : s.pendingAt;
-    if (s.started && s.ready) {
+    /* The platform player refused an HLS stream outright (Samsung Tizen 9: media error 4): the same stream through
+       hls.js next, at the same position. */
+    if (c && c.hls && !c.synthetic && !viaHls && !s.ready && formatError(reason) && hlsRetryOk()) {
+      var copy = {}, k;
+      for (k in c) if (c.hasOwnProperty(k)) copy[k] = c[k];
+      copy.engine = 'hlsjs';
+      copy.afterNative = true;
+      copy.nativeReason = reason;
+      Log.info('player', 'the platform player refused ' + c.label + ' (' + reason + '): trying it through hls.js');
+      s.cands.splice(s.ci + 1, 0, copy);
+      startCandidate(s, s.ci + 1, at, reason);
+      return;
+    }
+    if (c && !c.synthetic) { s.failed[c.label] = true; s.fails.push({ label: c.label, reason: reason }); }
+    if (s.started && s.ready && !(c && c.synthetic) && !s.switching) {
       report(s, 'switch');
       s.switchNote = 'Playback hiccup \u2014 switched to a backup stream';
     }
+    /* The TV's player refused an HLS stream before it even loaded: the other HLS renditions are built the same way,
+       so the MP4 originals go next. */
+    if (c && c.hls && !c.synthetic && !s.ready && formatError(reason)) promoteFiles(s);
     startCandidate(s, s.ci + 1, at, reason);
+  }
+
+  function promoteFiles(s) {
+    var head = s.cands.slice(0, s.ci + 1), rest = s.cands.slice(s.ci + 1), files = [], others = [];
+    U.each(rest, function (c) { if (!c.hls && c.kind === 'mp4') files.push(c); else others.push(c); });
+    if (files.length && others.length && U.indexOf(rest, files[0]) > 0) {
+      Log.info('player', 'the TV refused HLS: trying the original file next');
+      s.cands = head.concat(files, others);
+    }
+  }
+
+  /* For the log: the video element's error message and states (Tizen and webOS put their player's reason there). */
+  function mediaState() {
+    var v = ui && ui.video;
+    if (!v) return '';
+    var e = v.error, msg = e && e.message ? ' "' + clean(e.message).slice(0, 80) + '"' : '';
+    return ' (ready ' + v.readyState + ', net ' + v.networkState + msg + ')';
   }
 
   /* Every candidate failed. Mid-film this is usually the signed, time-limited stream links expiring, so fresh player
@@ -7359,10 +8607,30 @@ var NativePlayer = (function () {
       });
       return;
     }
-    Log.warn('player', 'every stream failed');
+    Log.warn('player', 'every stream failed: ' + U.map(s.fails, function (f) { return f.label + ' ' + f.reason; }).join(', '));
     s.lastTime = at;
-    showError(s, 'streams-failed', s.started ? 'The video stopped and none of its streams would start again. Check your connection and try again.' :
-      'None of the available streams would play on this TV. The website\u2019s own player may still work.');
+    showError(s, 'streams-failed', failMessage(s), failCode(s));
+  }
+
+  var REASONS = { 'media-1': 'stopped', 'media-2': 'network error', 'media-3': 'couldn\u2019t decode', 'media-4': 'format not supported',
+    timeout: 'no answer', 'no-start': 'didn\u2019t start', stall: 'stalled', exception: 'refused', 'hls-format': 'format not supported',
+    'hls-network': 'network error', 'hls-media': 'couldn\u2019t decode', 'hls-other': 'refused' };
+  function reasonText(r) { return REASONS[r] || (/^play-/.test(r) ? 'refused' : r); }
+
+  /* The error card's text, from what the candidates did. */
+  function failMessage(s) {
+    var n = s.fails.length, fmt = 0, slow = 0, more = s.files.length > 1 ? ' Try another file of this title, or the website\u2019s player.' : ' The website\u2019s own player may still work.';
+    U.each(s.fails, function (f) { if (formatError(f.reason)) fmt++; else if (/^(?:timeout|stall|no-start|media-2|hls-network)$/.test(f.reason)) slow++; });
+    if (s.started) return 'The video stopped and none of its streams would start again. Check your connection and try again.';
+    if (n && fmt === n) return 'This TV can\u2019t play the video or audio format of this file.' + more;
+    if (n && slow === n) return 'The streams didn\u2019t load in time. Your connection may be slow, or MovieBox Pro\u2019s servers are busy. Try again in a moment.';
+    return 'None of the available streams would play on this TV.' + more;
+  }
+
+  function failCode(s) {
+    var seen = {}, parts = [];
+    U.each(s.fails, function (f) { var k = f.label + f.reason; if (!seen[k] && parts.length < 6) { seen[k] = true; parts.push(displayLabel(f.label) + ': ' + reasonText(f.reason)); } });
+    return parts.length ? 'Tried ' + parts.join(' \u00b7 ') : '';
   }
 
   function playVideo(s) {
@@ -7389,6 +8657,7 @@ var NativePlayer = (function () {
   }
 
   function releaseVideo() {
+    destroyHls();
     var v = ui && ui.video;
     if (!v) return;
     try { v.pause(); } catch (e) {}
@@ -7436,18 +8705,31 @@ var NativePlayer = (function () {
       s.pendingAt = 0;
       if (s.resumePending) {
         s.resumePending = false;
-        if (at > 10 && d > 0 && at < d - 60) { mark(s, 'seek'); seekTo(s, at); s.resumed = at; } else s.lastTime = 0;
+        if (at > 10 && d > 0 && at < d - 60) { mark(s, 'seek'); seekTo(s, at); s.resumed = at; } else {
+          s.lastTime = 0;
+          if (ui.video.currentTime > 1) seekTo(s, 0); /* hls.js may have started at the saved position */
+        }
       } else if (at > 0 && d > 0) seekTo(s, Math.min(at, d - 1));
+      /* Native HLS players can ignore a seek made this early (and start at 0): checked once it plays. */
+      s.seekCheck = s.lastTime > 1 ? { target: s.lastTime, tries: 0, at: U.now() } : null;
       if (s.blocked) reveal(s);
+      alive(s);
+      audioRefresh(s);
       render(s);
     });
+    on('loadeddata', function (s) { alive(s); });
     on('playing', function (s) {
+      var first = s.playedTry !== s.tryId;
       s.ready = true;
       s.blocked = false;
       s.userPaused = false;
       s.playedTry = s.tryId;
+      if (first) engineLine(s);
       s.playedSinceRelink = true;
       cancel(s, 'cand');
+      cancel(s, 'candmax');
+      checkSeek(s);
+      switchOutcome(s);
       setBuffering(s, false);
       keepAwake(true);
       if (!s.started) {
@@ -7471,6 +8753,7 @@ var NativePlayer = (function () {
       if (s.osd) scheduleHide(s);
       render(s);
       subTick(s);
+      audioRefresh(s);
       /* It started while the app is in the background: hold it there (see toBackground). */
       if (isHidden()) toBackground(s);
     });
@@ -7495,22 +8778,93 @@ var NativePlayer = (function () {
     on('timeupdate', function (s) {
       if (!s.ready) return;
       var t = ui.video.currentTime;
-      if (!ui.video.seeking && t > 0) s.lastTime = t;
+      if (s.seekCheck) checkSeek(s);
+      if (!ui.video.seeking && t > 0 && !s.seekCheck) s.lastTime = t;
       if (s.buffering && Math.abs(t - s.waitAt) >= 0.5) { setBuffering(s, false); cancel(s, 'stall'); }
       if (U.now() - s.lastRender >= 250) render(s);
       checkUpNext(s);
       subTick(s);
     });
-    on('progress', function (s) { if (s.osd && U.now() - s.lastRender >= 250) render(s); });
+    on('progress', function (s) {
+      if (s.playedTry !== s.tryId) {
+        /* Data arriving counts as life: before metadata a large original (MP4 index at the end of the file) is still
+           being read; after it, more is buffered. */
+        var b = bufferedEnd(ui.video);
+        if (!s.ready) alive(s);
+        else if (b > s.lastBuf + 0.25) { s.lastBuf = b; alive(s); }
+      }
+      if (s.osd && U.now() - s.lastRender >= 250) render(s);
+    });
     on('durationchange', function (s) { var d = dur(); if (d > 0) s.lastDur = d; render(s); });
-    on('seeked', function (s) { mark(s, 'seeked'); render(s); subTick(s); });
-    on('canplay', function (s) { mark(s, 'canplay'); });
+    on('seeked', function (s) { mark(s, 'seeked'); alive(s); render(s); subTick(s); });
+    on('canplay', function (s) { mark(s, 'canplay'); alive(s); });
     on('ended', function (s) { onEnded(s); });
+    var tl = null;
+    try { tl = v.audioTracks; } catch (e) { tl = null; }
+    if (tl && typeof tl.addEventListener === 'function') {
+      U.each(['addtrack', 'removetrack', 'change'], function (type) {
+        ui.offs.push(U.on(tl, type, function () { var s = S; if (s && !s.finished && s.state !== 'error' && s.ready) audioRefresh(s); }));
+      });
+    }
     on('error', function (s) {
-      var v2 = ui.video, code = v2 && v2.error ? v2.error.code : 0;
+      var v2 = ui.video, code = v2 && v2.error ? v2.error.code : 0, h = hlsOf(s);
+      if (h) { hlsMediaError(s, h, code); return; }
       if (!v2 || !v2.getAttribute('src')) return;
       candidateFailed(s, s.tryId, 'media-' + code);
     });
+  }
+
+  function bufferedEnd(v) {
+    try { var b = v.buffered; return b && b.length ? b.end(b.length - 1) : 0; } catch (e) { return 0; }
+  }
+
+  /* A position set at loadedmetadata (resume, quality or file switch, fresh links) must actually be reached: some
+     native HLS players start from 0 instead. Checked when it plays; seeks again at most twice. */
+  function checkSeek(s) {
+    var k = s.seekCheck, v = ui && ui.video;
+    if (!k || !v || v.seeking || !s.ready) return;
+    var t = v.currentTime;
+    if (U.now() - k.at > 60000 || Math.abs(t - k.target) <= CFG.seekSlack) { s.seekCheck = null; return; }
+    if (k.tries >= 2) {
+      s.seekCheck = null;
+      Log.warn('player', 'position not applied: at ' + Math.round(t) + ' instead of ' + Math.round(k.target));
+      return;
+    }
+    k.tries++;
+    Log.info('player', 'at ' + Math.round(t) + ' instead of ' + Math.round(k.target) + ': seeking again');
+    seekTo(s, k.target);
+  }
+
+  /* One line per stream that starts playing: which engine, which stream, and with hls.js the level and audio. */
+  function engineLine(s) {
+    var c = s.cands[s.ci], h = hlsOf(s), parts = [];
+    if (!c) return;
+    if (h) {
+      h.reported = true;
+      parts.push('engine hls.js ' + lib.version + ' (' + lib.from + ')', c.label);
+      var lv = hlsLevelNow(h), au = hlsAudioCode(h);
+      if (lv) parts.push(lv + ' level');
+      if (au) parts.push('audio ' + au);
+      if (c.afterNative && verdict() !== 'refuses') {
+        Store.local.set(HLS_VERDICT, { ua: String(navigator.userAgent || ''), native: 'refuses', at: U.now() });
+        Log.info('player', 'the platform player refuses HLS here: hls.js from now on (remembered)');
+      }
+    } else parts.push('engine native', c.label + (c.hls ? ' (HLS)' : c.kind && c.kind !== 'hls' ? ' (' + c.kind + ')' : ''));
+    Log.info('player', parts.join(' \u00b7 '));
+  }
+
+  /* The viewer's quality or audio choice took effect, or another stream took over: say which. */
+  function switchOutcome(s) {
+    var c = s.cands[s.ci], sw = s.switching, au = s.audio.pending;
+    if (sw) {
+      s.switching = null;
+      if (c && c.label === sw.label) s.switchNote = 'Quality: ' + displayLabel(sw.label);
+      else {
+        Log.warn('player', 'quality ' + sw.label + ' did not play; ' + (c ? c.label : '?') + ' instead');
+        s.switchNote = displayLabel(sw.label) + ' didn\u2019t play on this TV \u2014 playing ' + displayLabel(c ? c.label : '') + ' instead';
+      }
+    }
+    if (au) audioOutcome(s, c, au);
   }
 
   function setBuffering(s, on) {
@@ -7551,6 +8905,7 @@ var NativePlayer = (function () {
       s.bgPaused = true;
       s.userPaused = true;
       try { ui.video.pause(); } catch (e) {}
+      hlsPause(s, true);
     }
     keepAwake(false);
   }
@@ -7558,6 +8913,7 @@ var NativePlayer = (function () {
   function fromBackground(s) {
     if (!s.bgPaused) return;
     s.bgPaused = false;
+    hlsPause(s, false);
     if (s.state === 'playing' && !(s.upnext && s.upnext.visible)) { showOsd(s); render(s); }
   }
 
@@ -7830,7 +9186,7 @@ var NativePlayer = (function () {
     if (c.label === 'AUTO') out.push('Auto');
     else if (c.label === 'ORG') out.push(c.height >= 2000 || c.width >= 3800 ? '4K' : c.height >= 1000 || c.width >= 1900 ? '1080p' : 'Original');
     else out.push(c.label);
-    if (c.hdr) out.push('HDR');
+    if (c.hdr && (c.label === 'ORG' || rank(c.label) >= 2160)) out.push('HDR');
     return out;
   }
 
@@ -7985,6 +9341,8 @@ var NativePlayer = (function () {
     if (introActive(s)) list.push({ action: 'skip-intro', icon: 'skip', label: 'Skip Intro' });
     if (s.next) list.push({ action: 'next-episode', icon: 'next', label: 'Next Episode', value: s.next.season === s.season ? 'E' + s.next.episode : 'S' + s.next.season + ' E' + s.next.episode });
     if (qualityOptions(s).length > 1 || s.files.length > 1) list.push({ action: 'quality', icon: 'quality', label: 'Quality', value: c ? displayLabel(c.label) : '' });
+    var ao = s.state === 'playing' ? audioOptions(s) : null;
+    if (ao) list.push({ action: 'audio', icon: 'audio', label: 'Audio', value: audioCurrent(ao) });
     if (s.subs.langs.length) list.push({ action: 'subtitles', icon: 'subtitles', label: 'Subtitles', value: subValue(s) });
     list.push({ action: 'start-over', icon: 'restart', label: 'Start over' });
     return list;
@@ -8023,6 +9381,7 @@ var NativePlayer = (function () {
       case 'next-episode': playNext(s, 'button'); return;
       case 'quality': openSheet(s); return;
       case 'subtitles': openSubSheet(s); return;
+      case 'audio': openAudioSheet(s); return;
       case 'start-over': startOver(s); return;
     }
   }
@@ -8059,6 +9418,7 @@ var NativePlayer = (function () {
     var at = introPoint(s, dur());
     if (!(at > 0)) return;
     Log.info('player', 'skip intro to ' + Math.round(at));
+    s.seekCheck = null;
     seekTo(s, at);
     later(s, 'seekreport', function () { report(s, 'seek'); }, CFG.seekReport);
     render(s);
@@ -8066,6 +9426,7 @@ var NativePlayer = (function () {
 
   function startOver(s) {
     Log.info('player', 'start over');
+    s.seekCheck = null;
     hideChip(s);
     seekTo(s, 0);
     if (paused()) playVideo(s);
@@ -8102,6 +9463,7 @@ var NativePlayer = (function () {
     if (!s.seek) return;
     var target = s.seek.target;
     s.seek = null;
+    s.seekCheck = null;
     s.seekKey = null;
     flag(ui.root, 'is-seeking', false);
     seekTo(s, target);
@@ -8114,22 +9476,31 @@ var NativePlayer = (function () {
 
   /* ---------- sheets (quality, subtitles): one side sheet, filled per kind ---------- */
 
+  /* The site copies the 1080p size onto lower renditions ("720p 1916 x 1080"): show a size only when it fits. */
+  function sizeFits(c, r) {
+    if (!(c.width > 0 && c.height > 0)) return false;
+    if (!r) return true;
+    return c.height <= r * 1.1 && Math.max(c.height, c.width / 2.4) >= r * 0.6;
+  }
+
   function openSheet(s) {
     var items = [], cur = s.cands[s.ci];
     U.each(qualityOptions(s), function (c) {
       var meta = [], r = rank(c.label);
+      if (s.failed[c.label]) meta.push('Didn\u2019t play here');
       if (c.label === 'AUTO') meta.push('Adapts to your connection');
-      else if (c.label === 'ORG') meta.push('Best picture');
+      else if (c.label === 'ORG') meta.push(c.kind === 'risky' ? 'Original file \u00b7 may not play on a TV' : 'Original file');
+      else if (r >= 2160) meta.push('4K \u00b7 needs a fast connection');
       else if (r >= 1080) meta.push('Full HD');
       else if (r >= 720) meta.push('HD \u00b7 for slower connections');
       else if (r > 0) meta.push('Data saver');
-      if (c.width > 0 && c.height > 0) meta.push(c.width + ' \u00d7 ' + c.height);
+      if (sizeFits(c, r)) meta.push(c.width + ' \u00d7 ' + c.height);
       if (c.label === 'ORG' || c.h265) meta.push(c.h265 ? 'HEVC' : 'H.264');
-      if (c.hdr) meta.push('HDR');
+      if (c.hdr && (c.label === 'ORG' || r >= 2160)) meta.push('HDR');
       if (c.label === 'ORG' && c.fps > 0) meta.push(Math.round(c.fps) + ' fps');
       items.push({ type: 'quality', label: c.label, title: displayLabel(c.label), meta: meta.join('  \u00b7  '), current: !!cur && cur.label === c.label });
     });
-    if (s.kind === 'movie' && s.files.length > 1) {
+    if (s.files.length > 1) {
       U.each(s.files, function (f, i) {
         var meta = U.filter([f.file, f.size], function (x) { return !!x; }).join('  \u00b7  ');
         items.push({ type: 'file', index: i, title: f.quality || ('File ' + (i + 1)), meta: meta, current: i === s.fileIndex, section: 'Source file' });
@@ -8143,10 +9514,10 @@ var NativePlayer = (function () {
   /* kind 'quality' | 'subtitles'; items [{type, title, meta, current, section, ...}]. */
   function showSheet(s, kind, items, focus, sub) {
     if (!items.length) return;
-    var subs = kind === 'subtitles';
-    ui.sheet.setAttribute('data-sheet', subs ? 'player-subtitles' : 'player-quality');
-    setText(ui.sheetKicker, subs ? 'Subtitles' : 'Quality');
-    setText(ui.sheetTitle, subs ? 'Choose subtitles' : 'Choose quality');
+    var names = { quality: 'Quality', subtitles: 'Subtitles', audio: 'Audio' };
+    ui.sheet.setAttribute('data-sheet', 'player-' + kind);
+    setText(ui.sheetKicker, names[kind] || '');
+    setText(ui.sheetTitle, kind === 'audio' ? 'Choose audio language' : 'Choose ' + String(names[kind] || '').toLowerCase());
     U.empty(ui.sheetList);
     var labelled = {};
     U.each(items, function (it) {
@@ -8157,9 +9528,10 @@ var NativePlayer = (function () {
       else if (it.type === 'file') row.setAttribute('data-file-index', String(it.index));
       else if (it.type === 'sub-off') row.setAttribute('data-subtitle', 'off');
       else if (it.type === 'sub') { row.setAttribute('data-subtitle', it.li + ':' + it.fi); row.setAttribute('data-subtitle-lang', it.lang); }
+      else if (it.type === 'audio') { row.setAttribute('data-audio', String(it.index)); row.setAttribute('data-audio-lang', it.code || ''); }
       var text = el('div', 'mbp-opt-text', null, row);
       var label = el('div', 'mbp-opt-label', it.title, text);
-      if (it.type === 'sub') label.setAttribute('dir', 'auto');
+      if (it.type === 'sub' || it.type === 'audio') label.setAttribute('dir', 'auto');
       if (it.meta) el('div', 'mbp-opt-meta', it.meta, text);
       row.appendChild(icon('check', 'mbp-opt-check'));
       it.el = row;
@@ -8192,7 +9564,7 @@ var NativePlayer = (function () {
     s.sheet = null;
     flag(ui.root, 'is-sheet', false);
     showOsd(s);
-    setArea(s, 'buttons', kind === 'subtitles' ? 'subtitles' : 'quality');
+    setArea(s, 'buttons', kind === 'subtitles' || kind === 'audio' ? kind : 'quality');
   }
 
   function chooseSheet(s) {
@@ -8201,6 +9573,7 @@ var NativePlayer = (function () {
     closeSheet(s);
     if (it.type === 'sub-off') { if (s.subs.sel || s.subs.loading) subsOff(s, true); else savePref('off'); return; }
     if (it.type === 'sub') { if (!it.current || !s.subs.cues) selectSub(s, it.li, it.fi, 'user'); else savePref(s.subs.sel.name); return; }
+    if (it.type === 'audio') { selectAudio(s, it.index, 'user'); return; }
     if (it.current) return;
     if (it.type === 'quality') switchQuality(s, it.label);
     else switchFile(s, it.index);
@@ -8458,20 +9831,358 @@ var NativePlayer = (function () {
     later(s, 'sub', function () { subTick(s); }, U.clamp((at.next - t) / rate * 1000 + 20, 30, 1000));
   }
 
-  /* The chosen stream first, then the usual order, with streams that already failed in this session last. */
+
+  /* ---------- audio languages (docs/PLAYER.md "Audio languages") ---------- */
+
+  /* Whether a rewritten HLS master (data: URL) plays on this TV: '' not tried yet, 'ok', 'broken' (for this run). */
+  var manifestState = '';
+
+  var LANGS = {
+    en: 'English', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian',
+    pt: 'Portuguese', ru: 'Russian', hi: 'Hindi', ar: 'Arabic', tr: 'Turkish', pl: 'Polish', nl: 'Dutch', sv: 'Swedish',
+    da: 'Danish', fi: 'Finnish', no: 'Norwegian', nb: 'Norwegian', cs: 'Czech', hu: 'Hungarian', el: 'Greek', he: 'Hebrew',
+    th: 'Thai', vi: 'Vietnamese', id: 'Indonesian', ms: 'Malay', ta: 'Tamil', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada',
+    bn: 'Bengali', uk: 'Ukrainian', ro: 'Romanian', fa: 'Persian', ur: 'Urdu', tl: 'Filipino', ca: 'Catalan', hr: 'Croatian',
+    sr: 'Serbian', bg: 'Bulgarian', sk: 'Slovak', sl: 'Slovenian', lt: 'Lithuanian', lv: 'Latvian', et: 'Estonian', is: 'Icelandic'
+  };
+  /* ISO 639-2 codes (Matroska tracks, and the site's NAME="KOR (5.1)" labels) to the 2-letter codes above. */
+  var LANG3 = {
+    eng: 'en', jpn: 'ja', kor: 'ko', chi: 'zh', zho: 'zh', spa: 'es', fre: 'fr', fra: 'fr', ger: 'de', deu: 'de', ita: 'it',
+    por: 'pt', rus: 'ru', hin: 'hi', ara: 'ar', tur: 'tr', pol: 'pl', dut: 'nl', nld: 'nl', swe: 'sv', dan: 'da', fin: 'fi',
+    nor: 'no', nob: 'nb', cze: 'cs', ces: 'cs', hun: 'hu', gre: 'el', ell: 'el', heb: 'he', tha: 'th', vie: 'vi', ind: 'id',
+    may: 'ms', msa: 'ms', tam: 'ta', tel: 'te', mal: 'ml', kan: 'kn', ben: 'bn', ukr: 'uk', rum: 'ro', ron: 'ro', per: 'fa',
+    fas: 'fa', urd: 'ur', fil: 'tl', tgl: 'tl', cat: 'ca', hrv: 'hr', srp: 'sr', bul: 'bg', slo: 'sk', slk: 'sk', slv: 'sl',
+    lit: 'lt', lav: 'lv', est: 'et', ice: 'is', isl: 'is'
+  };
+
+  /* 'en', 'eng', 'en-GB', 'KOR' -> 'en' / 'ko'; unknown ('un', 'und') -> ''. */
+  function langCode(v) {
+    var c = String(v || '').toLowerCase().replace(/_/g, '-').split('-')[0];
+    if (LANG3.hasOwnProperty(c)) return LANG3[c];
+    if (!/^[a-z]{2}$/.test(c) || c === 'un') return '';
+    return c;
+  }
+
+  function langName(code) { return LANGS.hasOwnProperty(code) ? LANGS[code] : code ? code.toUpperCase() : ''; }
+
+  function m3uAttrs(line) {
+    var out = {}, re = /([A-Z0-9\-]+)=("[^"]*"|[^,]*)/g, m;
+    while ((m = re.exec(line))) out[m[1]] = m[2].replace(/^"|"$/g, '');
+    return out;
+  }
+
+  /* Pure: an HLS master playlist -> {group, list: [{code, lang, name, def, channels}], def} for the audio group the
+     first variant uses (the site's masters carry one AAC group with audio=aac, e.g. KOR and ITA). */
+  function audioList(text) {
+    var lines = String(text || '').split(/\r?\n/), groups = {}, group = '', i, a;
+    for (i = 0; i < lines.length; i++) {
+      if (/^#EXT-X-MEDIA:/.test(lines[i])) {
+        a = m3uAttrs(lines[i].slice(13));
+        if (a.TYPE !== 'AUDIO' || !a['GROUP-ID']) continue;
+        (groups[a['GROUP-ID']] = groups[a['GROUP-ID']] || []).push({
+          code: langCode(a.LANGUAGE) || langCode(String(a.NAME || '').split(/[\s(#]/)[0]), lang: a.LANGUAGE || '',
+          name: U.text(a.NAME || '').slice(0, 60), def: a.DEFAULT === 'YES', channels: a.CHANNELS || ''
+        });
+      } else if (!group && /^#EXT-X-STREAM-INF:/.test(lines[i])) group = m3uAttrs(lines[i].slice(18)).AUDIO || '';
+    }
+    var list = group && groups[group] ? groups[group] : [], def = 0;
+    for (i = 0; i < list.length; i++) if (list[i].def) { def = i; break; }
+    return { group: group, list: list, def: def };
+  }
+
+  function absUrl(u, base) {
+    u = String(u || '');
+    if (/^[a-z][a-z0-9+.\-]*:/i.test(u)) return u;
+    var m = /^([a-z]+:)\/\/([^\/?#]*)([^?#]*)/i.exec(String(base || ''));
+    if (!m) return u;
+    if (u.slice(0, 2) === '//') return m[1] + u;
+    if (u.charAt(0) === '/') return m[1] + '//' + m[2] + u;
+    return m[1] + '//' + m[2] + m[3].replace(/[^\/]*$/, '') + u;
+  }
+
+  function setM3uAttr(line, name, value) {
+    var re = new RegExp('([:,])' + name + '=("[^"]*"|[^,]*)');
+    return re.test(line) ? line.replace(re, '$1' + name + '=' + value) : line + ',' + name + '=' + value;
+  }
+
+  /* Pure: the master with only the index-th rendition of the audio group (made the default) and every address
+     absolute, so the TV's player can read it from a data: URL. */
+  function audioMaster(text, base, group, index) {
+    var lines = String(text || '').split(/\r?\n/), out = [], k = -1, i, line, a;
+    for (i = 0; i < lines.length; i++) {
+      line = lines[i];
+      if (/^#EXT-X-MEDIA:/.test(line)) {
+        a = m3uAttrs(line.slice(13));
+        if (a.TYPE === 'AUDIO' && a['GROUP-ID'] === group) {
+          k++;
+          if (k !== index) continue;
+          line = setM3uAttr(setM3uAttr(line, 'DEFAULT', 'YES'), 'AUTOSELECT', 'YES');
+        }
+      }
+      if (line.charAt(0) === '#') line = line.replace(/URI="([^"]*)"/g, function (m0, u) { return 'URI="' + absUrl(u, base) + '"'; });
+      else if (/\S/.test(line)) line = absUrl(line.replace(/^\s+|\s+$/g, ''), base);
+      out.push(line);
+    }
+    return out.join('\n');
+  }
+
+  function dataUrl(text) {
+    try { return 'data:application/vnd.apple.mpegurl;base64,' + window.btoa(unescape(encodeURIComponent(text))); } catch (e) { return ''; }
+  }
+
+  function trackList() {
+    try { var t = ui && ui.video ? ui.video.audioTracks : null; return t && typeof t.length === 'number' ? t : null; } catch (e) { return null; }
+  }
+
+  /* GET text cross-site without credentials (the HLS hosts answer Access-Control-Allow-Origin: *). */
+  function getText(s, url, cb) {
+    var done = false, req = new XMLHttpRequest(), timer = null, h = null;
+    function finish(err, text) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      var i = U.indexOf(s.reqs, h);
+      if (i >= 0) s.reqs.splice(i, 1);
+      U.later(function () { cb(err, text); }, 0, 'player-audio-cb');
+    }
+    h = { abort: function () { if (!done) { done = true; clearTimeout(timer); try { req.abort(); } catch (e) {} } } };
+    s.reqs.push(h);
+    try {
+      req.open('GET', url, true);
+      req.onreadystatechange = function () {
+        if (req.readyState !== 4 || done) return;
+        var t = '';
+        try { t = String(req.responseText || ''); } catch (e0) { t = ''; }
+        if (req.status >= 200 && req.status < 300) finish(t.length > 400000 ? 'too-big' : null, t);
+        else finish(req.status ? 'http-' + req.status : 'network', '');
+      };
+      timer = setTimeout(function () { finish('timeout', ''); try { req.abort(); } catch (e1) {} }, CFG.audioTimeout);
+      req.send(null);
+    } catch (e2) { finish('exception', ''); }
+  }
+
+  /* The HLS master of the stream that plays, read once it plays (never before: the start must not wait for it). */
+  function audioFetch(s, c) {
+    var a = s.audio;
+    if (!c || !c.hls || c.synthetic || /^data:/i.test(c.src) || (a.master && a.master.src === c.src) || a.fetching === c.src || a.unread === c.src) return;
+    a.fetching = c.src;
+    getText(s, c.src, function (err, text) {
+      if (s !== S || s.finished) return;
+      if (a.fetching === c.src) a.fetching = '';
+      if (err || !/^\s*#EXTM3U/.test(text)) { a.unread = c.src; Log.info('player', 'audio: master not read (' + (err || 'not a playlist') + ')'); return; }
+      var info = audioList(text), tl = trackList();
+      a.master = { src: c.src, text: text, group: info.group, list: info.list, def: info.def };
+      Log.info('player', 'audio: ' + c.label + ' lists ' + info.list.length + (info.list.length ? ' [' + U.map(info.list, function (x, i) {
+        return (x.code || x.lang || '?') + (i === info.def ? '*' : '');
+      }).join(', ') + ']' : '') + '; video.audioTracks ' + (tl ? tl.length : 'missing') + (manifestState ? '; data: master ' + manifestState : ''));
+      audioRefresh(s);
+    });
+  }
+
+  /* The choices for the stream that plays: {method: 'tracks' | 'manifest', items: [{index, code, title, meta, current}]}
+     or null. 'tracks' (the platform lists the tracks in video.audioTracks) is preferred; 'manifest' needs the HLS master
+     and a TV that plays a rewritten master (manifestState not 'broken'). */
+  /* hls.js's audio tracks (its current audio group) as raw choices. */
+  function hlsAudioRaw(h) {
+    var t = hlsAudioTracks(h), cur = hlsAudioIndex(h), out = [], i;
+    for (i = 0; i < t.length && i < 16; i++) {
+      var x = t[i] || {};
+      out.push({ index: i, code: langCode(x.lang) || langCode(String(x.name || '').split(/[\s(#]/)[0]), name: U.text(x.name || '').slice(0, 60), current: i === cur });
+    }
+    if (out.length && cur < 0) out[0].current = true;
+    return out;
+  }
+
+  function audioOptions(s) {
+    var c = s.cands[s.ci], a = s.audio, tl = trackList(), raw = [], method = '', i;
+    if (!c || !s.ready) return null;
+    var h = hlsOf(s);
+    if (h) return audioPost('hlsjs', hlsAudioRaw(h));
+    var src = c.synthetic ? c.orig.src : c.src, m = a.master && a.master.src === src ? a.master : null;
+    if (tl && tl.length > 1) {
+      method = 'tracks';
+      var any = false;
+      for (i = 0; i < tl.length && i < 16; i++) {
+        var t = tl[i], e = m && m.list.length === tl.length ? m.list[i] : null;
+        if (t && t.enabled) any = true;
+        raw.push({ index: i, code: langCode(t && t.language) || (e ? e.code : ''), name: U.text(t && t.label || '') || (e ? e.name : ''), current: !!(t && t.enabled) });
+      }
+      if (!any && raw.length) raw[0].current = true;
+    } else if (m && m.list.length > 1 && c.hls && manifestState !== 'broken') {
+      method = 'manifest';
+      var cur = c.synthetic ? c.audioIndex : m.def;
+      for (i = 0; i < m.list.length && i < 16; i++) raw.push({ index: i, code: m.list[i].code, name: m.list[i].name, current: i === cur });
+    } else return null;
+    return audioPost(method, raw);
+  }
+
+  /* Titles ('Japanese', 'English · 2') and second lines for raw choices; null when there is no real choice. */
+  function audioPost(method, raw) {
+    if (raw.length < 2) return null;
+    var count = {}, seen = {}, codes = 0;
+    U.each(raw, function (r) {
+      r.title = langName(r.code) || r.name || 'Track ' + (r.index + 1);
+      count[r.title] = (count[r.title] || 0) + 1;
+      if (!seen[r.code || r.title]) { seen[r.code || r.title] = true; codes++; }
+    });
+    /* One language twice over HLS (a stereo and a 5.1 mix, a commentary) is not worth a switch: only real choices. */
+    if ((method === 'manifest' || method === 'hlsjs') && codes < 2) return null;
+    var n = {};
+    U.each(raw, function (r) {
+      if (count[r.title] > 1) { n[r.title] = (n[r.title] || 0) + 1; if (n[r.title] > 1) r.title += ' · ' + n[r.title]; }
+      r.meta = r.name && r.name.toLowerCase() !== r.title.toLowerCase() ? r.name : '';
+    });
+    return { method: method, items: raw };
+  }
+
+  function audioCurrent(o) { var c = o ? U.find(o.items, function (x) { return x.current; }) : null; return c ? c.title : ''; }
+
+  function prefAudio() {
+    var v = '';
+    try { v = typeof Prefs !== 'undefined' ? Prefs.get('audioLang') : ''; } catch (e) { v = ''; }
+    return typeof v === 'string' ? U.text(v).toLowerCase() : '';
+  }
+
+  function saveAudioPref(it) {
+    try { if (typeof Prefs !== 'undefined') Prefs.set('audioLang', it.code || it.title); } catch (e) {}
+  }
+
+  function audioMatch(o, want) {
+    var i;
+    for (i = 0; i < o.items.length; i++) if (o.items[i].code && o.items[i].code === want) return i;
+    for (i = 0; i < o.items.length; i++) if (o.items[i].title.toLowerCase() === want) return i;
+    return -1;
+  }
+
+  /* After metadata, a track-list change, a master read or a start: refresh the Audio button and, once per stream,
+     switch to the remembered language (Prefs audioLang) when this title has it. */
+  function audioRefresh(s) {
+    if (!ui || s !== S || s.finished) return;
+    s.btnSig = '';
+    var c = s.cands[s.ci], a = s.audio;
+    if (c && c.hls && !c.synthetic && s.playedTry === s.tryId && !hlsOf(s)) audioFetch(s, c);
+    var want = prefAudio();
+    if (want && a.prefTry !== s.tryId && !a.pending && s.playedTry === s.tryId) {
+      var o = audioOptions(s), at = o ? audioMatch(o, want) : -1;
+      /* Wait for the master's names when the platform's tracks carry no language yet. */
+      if (o && (at >= 0 || a.master || !(c && c.hls) || !a.fetching)) {
+        a.prefTry = s.tryId;
+        if (at >= 0 && !o.items[at].current) {
+          Log.info('player', 'audio: the remembered language (' + want + ')');
+          selectAudio(s, at, 'auto');
+        }
+      }
+    }
+    if (s.state === 'playing') render(s);
+  }
+
+  /* how: 'user' (the sheet; remembered) or 'auto' (the remembered language). */
+  function selectAudio(s, index, how) {
+    var o = audioOptions(s), it = o && o.items[index];
+    if (!it) return;
+    if (how === 'user') saveAudioPref(it);
+    if (it.current) { if (how === 'user') showChip(s, 'Audio: ' + it.title, 2500, false); return; }
+    if (o.method === 'hlsjs') {
+      var h = hlsOf(s);
+      Log.info('player', 'audio: track ' + (it.index + 1) + ' of ' + o.items.length + ' (' + (it.code || '?') + ') via hls.js');
+      h.audioWant = { index: it.index, title: it.title, how: how };
+      try { h.hls.audioTrack = it.index; } catch (e0) { Log.warn('player', 'audio: ' + clean(e0)); }
+      if (how === 'user') showChip(s, 'Switching audio to ' + it.title + '\u2026', CFG.audioSwitchTimeout, false);
+      s.btnSig = '';
+      render(s);
+      later(s, 'audioverify', function () {
+        if (hlsCur !== h || !h.audioWant || h.audioWant.index !== it.index) return;
+        h.audioWant = null;
+        Log.warn('player', 'audio: hls.js did not switch the track');
+        showChip(s, 'The audio didn\u2019t switch', 3000, false);
+        s.btnSig = '';
+        render(s);
+      }, CFG.audioSwitchTimeout);
+      return;
+    }
+    if (o.method === 'tracks') {
+      var tl = trackList(), j;
+      Log.info('player', 'audio: track ' + (index + 1) + ' of ' + tl.length + ' (' + (it.code || '?') + ') via audioTracks');
+      try {
+        tl[index].enabled = true;
+        for (j = 0; j < tl.length; j++) if (j !== index && tl[j].enabled) tl[j].enabled = false;
+      } catch (e) { Log.warn('player', 'audio: ' + clean(e)); }
+      s.btnSig = '';
+      render(s);
+      later(s, 'audioverify', function () {
+        var now = trackList(), ok = !!(now && now[index] && now[index].enabled);
+        if (ok) Log.info('player', 'audio: switched'); else Log.warn('player', 'audio: the TV did not switch the track');
+        if (how === 'user' || !ok) showChip(s, ok ? 'Audio: ' + it.title : 'The TV didn’t switch the audio', 3000, false);
+        s.btnSig = '';
+        render(s);
+      }, CFG.audioVerify);
+      return;
+    }
+    /* 'manifest': the same stream from a master that offers only the chosen rendition, at the same position; if the
+       TV cannot play it, the stream that was playing takes over again (switchOutcome -> audioOutcome). */
+    var c = s.cands[s.ci], base = c.synthetic ? c.orig : c, m = s.audio.master, cand = base;
+    if (index !== m.def) {
+      var url = dataUrl(audioMaster(m.text, m.src, m.group, index));
+      if (!url) return;
+      cand = { label: base.label, src: url, hls: true, h265: base.h265, hdr: base.hdr, width: base.width, height: base.height,
+        fps: base.fps, kind: 'hls', synthetic: true, orig: base, audioIndex: index };
+    }
+    var rest = U.filter(s.cands, function (x) { return x !== c && x !== base && !x.synthetic; });
+    var at = pos(s);
+    report(s, 'switch');
+    Log.info('player', 'audio: ' + (it.code || '?') + ' via a rewritten master at ' + Math.round(at));
+    s.audio.pending = { index: index, title: it.title, how: how, synthetic: cand !== base };
+    s.cands = [cand].concat(cand !== base ? [base] : [], rest);
+    s.switchNote = '';
+    s.resumePending = false;
+    if (how === 'user') showChip(s, 'Switching audio to ' + it.title + '…', 8000, false);
+    startCandidate(s, 0, at, 'audio');
+  }
+
+  function audioOutcome(s, c, au) {
+    s.audio.pending = null;
+    if (!au.synthetic) { if (au.how === 'user') s.switchNote = 'Audio: ' + au.title; return; }
+    if (c && c.synthetic) {
+      if (manifestState !== 'ok') Log.info('player', 'audio: a rewritten master plays on this TV');
+      manifestState = 'ok';
+      s.switchNote = 'Audio: ' + au.title;
+    } else {
+      Log.warn('player', 'audio: a rewritten master does not play on this TV');
+      manifestState = 'broken';
+      s.switchNote = 'This TV can’t switch the audio language';
+    }
+  }
+
+  function openAudioSheet(s) {
+    var o = audioOptions(s), items = [], focus = 0;
+    if (!o) { showChip(s, 'No other audio languages for this title', 2500, false); return; }
+    U.each(o.items, function (it, i) {
+      if (it.current) focus = i;
+      items.push({ type: 'audio', index: it.index, code: it.code, title: it.title, meta: it.meta, current: it.current });
+    });
+    showSheet(s, 'audio', items, focus, 'Now: ' + audioCurrent(o) + '  ·  ' + o.items.length + ' tracks');
+  }
+
+  /* The chosen stream first; if it does not play, back to the stream that was playing (at the same position), then
+     the usual order with streams that already failed in this session last. The chip says what actually plays. */
   function switchQuality(s, label) {
-    var chosen = null, fresh = [], stale = [];
+    var chosen = null, cur = s.cands[s.ci], back = null, fresh = [], stale = [];
     U.each(s.base, function (c) {
       if (!chosen && c.label === label) chosen = c;
+      else if (!back && cur && c.label === cur.label) back = c;
       else if (s.failed[c.label]) stale.push(c);
       else fresh.push(c);
     });
     if (!chosen) return;
     var at = pos(s);
+    if (s.seek) at = s.seek.target;
+    s.seek = null; s.seekKey = null; cancel(s, 'seek');
+    if (ui) flag(ui.root, 'is-seeking', false);
     report(s, 'switch');
-    Log.info('player', 'quality ' + label + ' at ' + Math.round(at));
-    s.cands = [chosen].concat(fresh, stale);
-    s.switchNote = 'Quality: ' + displayLabel(label);
+    Log.info('player', 'quality ' + label + ' at ' + Math.round(at) + (back ? ' (from ' + back.label + ')' : ''));
+    s.cands = [chosen].concat(back ? [back] : [], fresh, stale);
+    s.switching = { label: label };
+    s.switchNote = '';
     s.resumePending = false;
     startCandidate(s, 0, at, 'quality');
   }
@@ -8674,6 +10385,19 @@ var NativePlayer = (function () {
 
   /* ---------- error card ---------- */
 
+  function triedFiles(s) {
+    var list = s.req.triedFiles && s.req.triedFiles.slice ? s.req.triedFiles.slice() : [];
+    if (U.indexOf(list, s.fileIndex) < 0) list.push(s.fileIndex);
+    return list;
+  }
+
+  /* The next file of this title not tried yet in this chain of attempts, or -1. */
+  function otherFile(s) {
+    var n = s.files.length, tried = triedFiles(s), i;
+    for (i = 1; i < n; i++) { var k = (s.fileIndex + i) % n; if (U.indexOf(tried, k) < 0) return k; }
+    return -1;
+  }
+
   function showError(s, reason, message, code) {
     if (!ui || s !== S) return;
     Log.warn('player', 'error card: ' + reason);
@@ -8702,6 +10426,8 @@ var NativePlayer = (function () {
     setText(ui.errCode, code || '');
     flag(ui.errCode, 'is-empty', !code);
     var btns = [], retry = reason === 'network' || reason === 'bad-answer' || reason === 'internal' || reason === 'streams-failed';
+    var other = reason === 'streams-failed' && !s.started ? otherFile(s) : -1;
+    if (other >= 0) btns.push({ action: 'other-file', icon: 'quality', label: 'Try another file' });
     if (retry) btns.push({ action: 'retry', icon: 'reload', label: 'Try again' });
     if (reason !== 'bad-request') btns.push({ action: 'website', icon: 'globe', label: 'Try website player' });
     btns.push({ action: 'back', icon: 'back', label: 'Back' });
@@ -8714,8 +10440,10 @@ var NativePlayer = (function () {
       el('span', 'mbp-btn-label', b.label, n);
       b.el = n;
     });
-    /* Mid-film (it played before) Try again is the likely fix; otherwise the website's player. */
-    var focus = 0, want = s.started && retry ? 'retry' : 'website';
+    /* Mid-film (it played before) Try again is the likely fix; streams that timed out: Try again; another file of
+       the title when there is one; otherwise the website's player (the last resort). */
+    var slow = s.fails.length > 0 && !U.find(s.fails, function (f) { return !/^(?:timeout|stall|media-2|hls-network)$/.test(f.reason); });
+    var focus = 0, want = s.started && retry ? 'retry' : other >= 0 ? 'other-file' : slow && retry ? 'retry' : 'website';
     U.each(btns, function (b, i) { if (b.action === want) focus = i; });
     s.err = { reason: reason, btns: btns, index: focus };
     renderError(s);
@@ -8734,7 +10462,16 @@ var NativePlayer = (function () {
     var b = e.btns[e.index];
     if (b.action === 'back') stop('back');
     else if (b.action === 'website') fallback(s, e.reason);
-    else if (b.action === 'retry') {
+    else if (b.action === 'other-file') {
+      var next = otherFile(s), copy = {}, k;
+      for (k in s.req) if (s.req.hasOwnProperty(k)) copy[k] = s.req[k];
+      copy.fileIndex = next;
+      copy.triedFiles = triedFiles(s).concat([next]);
+      var hooks2 = s.hooks;
+      Log.info('player', 'trying file ' + next + ' of ' + s.files.length);
+      finish(s, {});
+      begin(copy, hooks2, '');
+    } else if (b.action === 'retry') {
       /* A fresh start (new file list, new stream links) that continues where the video stopped. */
       var req = s.req, hooks = s.hooks, at = s.errAt;
       finish(s, {});
@@ -8878,7 +10615,9 @@ var NativePlayer = (function () {
   function configure(opts) {
     if (opts) for (var k in opts) if (opts.hasOwnProperty(k) && CFG.hasOwnProperty(k) && typeof opts[k] === 'number' && opts[k] >= 0) CFG[k] = opts[k];
     if (opts && typeof opts.tvOrder === 'string') tvOrder = opts.tvOrder;
-    var out = { tvOrder: tvOrder };
+    if (opts && /^(?:auto|hlsjs|native)$/.test(String(opts.hlsEngine || ''))) hlsMode = opts.hlsEngine;
+    if (opts && typeof opts.hlsCdn === 'string' && (opts.hlsCdn === '' || /^https?:\/\//i.test(opts.hlsCdn))) hlsCdn = opts.hlsCdn;
+    var out = { tvOrder: tvOrder, hlsEngine: hlsMode, hlsCdn: hlsCdn, hls: { state: lib.state, version: lib.version, from: lib.from, verdict: verdict() } };
     for (var c in CFG) if (CFG.hasOwnProperty(c)) out[c] = CFG[c];
     return out;
   }
@@ -8904,7 +10643,9 @@ var NativePlayer = (function () {
     _order: guarded('order', order, []),
     _cues: guarded('cues', parseCues, []),
     _decodeSub: guarded('decode-sub', decodeSub, ''),
-    _cuesAt: guarded('cues-at', cuesAt, null)
+    _cuesAt: guarded('cues-at', cuesAt, null),
+    _audioList: guarded('audio-list', audioList, null),
+    _audioMaster: guarded('audio-master', audioMaster, '')
   };
 }());
 /* ---- 60-app.js ---- */
@@ -9190,8 +10931,9 @@ var App = (function () {
     var su = Screens.siteUrl;
     if (name === 'home') navRoot('home', {}, 'home');
     else if (name === 'search') navRoot('search', {}, 'search');
-    else if (name === 'movies') navRoot('browse', { url: su('movies', [], '/movie'), title: 'Movies', kicker: 'Browse', nav: 'movies' }, 'movies');
-    else if (name === 'shows') navRoot('browse', { url: su('shows', [], '/tvshow'), title: 'TV Shows', kicker: 'Browse', nav: 'shows' }, 'shows');
+    /* Movies and TV Shows carry the filter bar; the filters chosen there are kept for the session (Filters). */
+    else if (name === 'movies') navRoot('browse', { url: su('movies', [], '/movie'), title: 'Movies', kicker: 'Browse', nav: 'movies', filterKind: 'movie', remember: true }, 'movies');
+    else if (name === 'shows') navRoot('browse', { url: su('shows', [], '/tvshow'), title: 'TV Shows', kicker: 'Browse', nav: 'shows', filterKind: 'tv', remember: true }, 'shows');
     else if (name === 'library') {
       var lib = su('library', [], '/index/index/my_box');
       navRoot('browse', { url: lib, title: 'My Library', kicker: 'Your titles', nav: 'library', tabs: [
@@ -9708,7 +11450,7 @@ var App = (function () {
   }
 
   function labelEpisode(label) {
-    var m = /S(\d+)\s*E(\d+)/i.exec(String(label || ''));
+    var m = /S(\d+)\s*:?\s*E(\d+)/i.exec(String(label || ''));   /* "S37E21", the mobile page's "S1:E1" */
     return m && +m[1] > 0 && +m[2] > 0 ? { season: +m[1], episode: +m[2] } : null;
   }
 

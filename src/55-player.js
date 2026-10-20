@@ -9,7 +9,8 @@ var NativePlayer = (function () {
   var CFG = {
     requestTimeout: 15000, retryDelay: 700, candidateTimeout: 15000, stallTimeout: 15000, osdHide: 4000,
     progressEvery: 20000, seekApply: 400, seekReport: 1500, upNextLead: 25, upNextCount: 10, chipMs: 6000,
-    startBudget: 60000, stillWatchingAfter: 3, repeatGap: 250, subTimeout: 15000
+    startBudget: 90000, stillWatchingAfter: 3, repeatGap: 250, subTimeout: 15000, candidateMax: 40000, audioTimeout: 8000,
+    audioVerify: 1500, seekSlack: 8, hlsLoadTimeout: 10000, audioSwitchTimeout: 10000
   };
   /* Held keys act once (the App's hold guard also swallows held OK/Back, including repeats that arrive after the
      player closed); arrows and FF/RW keep auto-repeat for seeking and sheet navigation. */
@@ -18,7 +19,7 @@ var NativePlayer = (function () {
   var JW_FLAG = 'jw' + 'player=1'; /* the website's own "player data" flag (split so the site-globals lint scan skips it) */
   var FORM = 'application/x-www-form-urlencoded; charset=UTF-8';
   var MIME = { h264: 'video/mp4; codecs="avc1.640028"', hvc1: 'video/mp4; codecs="hvc1.1.6.L150.B0"', hev1: 'video/mp4; codecs="hev1.1.6.L150.B0"' };
-  var SHEET_ORDER = ['AUTO', '1080p', '720p', '480p', '360p', 'ORG'];
+  var SHEET_ORDER = ['AUTO', '4K', '2160p', '1440p', '1080p', '720p', '480p', '360p', 'ORG'];
 
   var gen = 0;        /* bumped by every session start and stop: callbacks from older sessions are dropped */
   var S = null;       /* the current session (one movie or one episode) */
@@ -41,6 +42,7 @@ var NativePlayer = (function () {
     back: '<path d="M10.9 5.2L4.1 12l6.8 6.8 1.7-1.7-3.9-3.9H20v-2.4H8.7l3.9-3.9z"/>',
     close: '<path d="M6.3 4.6L12 10.3l5.7-5.7 1.7 1.7-5.7 5.7 5.7 5.7-1.7 1.7-5.7-5.7-5.7 5.7-1.7-1.7 5.7-5.7-5.7-5.7z"/>',
     reload: '<path d="M12 4.2c2.2 0 4.2.9 5.6 2.4L20 4.2V11h-6.8l2.9-2.9A5.7 5.7 0 0 0 6.4 12H4.2A7.8 7.8 0 0 1 12 4.2zm7.8 7.8A7.8 7.8 0 0 1 6.4 17.4L4 19.8V13h6.8l-2.9 2.9a5.7 5.7 0 0 0 9.7-3.9z"/>',
+    audio: '<path d="M4 9.2h3.6L12.4 5c.6-.5 1.6-.1 1.6.7v12.6c0 .8-1 1.2-1.6.7l-4.8-4.2H4c-.6 0-1-.4-1-1v-3.6c0-.6.4-1 1-1zm12.1-1.6a6.4 6.4 0 0 1 0 8.8l-1.3-1.3a4.6 4.6 0 0 0 0-6.2zm2.6-2.6a10.1 10.1 0 0 1 0 14l-1.3-1.3a8.3 8.3 0 0 0 0-11.4z"/>',
     subtitles: '<path fill-rule="evenodd" d="M4.2 4.5h15.6c.7 0 1.2.5 1.2 1.2v12.6c0 .7-.5 1.2-1.2 1.2H4.2c-.7 0-1.2-.5-1.2-1.2V5.7c0-.7.5-1.2 1.2-1.2zM5.2 6.7v10.6h13.6V6.7zM6.8 11.4h4.8v1.9H6.8zm6.2 0h4.2v1.9H13zm-6.2 3h7.4v1.9H6.8zm8.6 0h1.8v1.9h-1.8z"/>'
   };
 
@@ -146,7 +148,10 @@ var NativePlayer = (function () {
     };
   }
 
-  function environment() { var tv = isTV(); return { tv: tv, aac: needsAac(tv), canPlay: canPlayProbe(), prefer: tv ? tvOrder : '' }; }
+  function environment(file) {
+    var tv = isTV();
+    return { tv: tv, aac: needsAac(tv), mse: mse(), canPlay: canPlayProbe(), prefer: tv ? tvOrder : '', fileName: file && file.file || '', fileSize: file && file.size || '' };
+  }
 
   /* configure({tvOrder: 'ORG,AUTO'}): on a TV, try these stream labels first, in this order (the rest keep theirs).
      For measuring start times on a TV from the remote inspector; '' (default) keeps the built-in order. */
@@ -163,6 +168,285 @@ var NativePlayer = (function () {
   /* The app is in the background (Home button, input switch, another app on top). */
   function isHidden() {
     try { return !!document.hidden || document.visibilityState === 'hidden' || !!document.webkitHidden; } catch (e) { return false; }
+  }
+
+  /* ---------- hls.js: HLS through Media Source Extensions (docs/PLAYER.md "HLS engine") ----------
+     Samsung's Tizen 9 web view (Chromium 120) refuses HLS in <video> (media error 4) but has MSE, so HLS plays there
+     through hls.js, as the website's own JW Player does. hls.js is third-party code loaded at run time, once and only
+     when needed: the site's own copy first (same origin, usually cached), then a pinned CDN copy. It is never part of
+     tv.js. The verdict "the platform player refuses HLS, hls.js plays it" is remembered per user agent, so later
+     starts go straight to hls.js. */
+
+  var HLS_SITE = '/static/videojs/hls.min.js'; /* the site's own copy: hls.js 1.4.0 (verified 2026-10-20) */
+  var hlsCdn = 'https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js';
+  var hlsMode = 'auto';                        /* configure({hlsEngine}): 'auto' | 'hlsjs' | 'native' */
+  var HLS_VERDICT = 'mbptv:hls-engine:v1';
+  var HLS_MIME = 'application/vnd.apple.mpegurl';
+  var lib = { state: '', Hls: null, from: '', version: '', waiters: [], failedAt: 0 };
+  var hlsCur = null; /* the hls.js instance attached to the video: {hls, H, s, tryId, c, recovered, ...} */
+
+  function mediaSource() { try { return window.MediaSource || window.WebKitMediaSource || null; } catch (e) { return null; } }
+  function mse() { var MS = mediaSource(); return !!(MS && typeof MS.isTypeSupported === 'function'); }
+  function mseType(type) { try { var MS = mediaSource(); return !!(MS && MS.isTypeSupported(type)); } catch (e) { return false; } }
+
+  function usableHls(H) {
+    try { return typeof H === 'function' && typeof H.isSupported === 'function' && !!H.isSupported() && !!H.Events; } catch (e) { return false; }
+  }
+
+  function libDone(H, from, t0) {
+    lib.state = 'ready';
+    lib.Hls = H;
+    lib.from = from;
+    lib.version = String(H.version || '?').slice(0, 24);
+    Log.info('player', 'hls.js ' + lib.version + ' ready (' + from + ', ' + ((U.now() - t0) / 1000).toFixed(1) + ' s; MSE ec-3 ' +
+      (mseType('audio/mp4; codecs="ec-3"') ? 'yes' : 'no') + ', hevc ' + (mseType('video/mp4; codecs="hvc1.2.4.L150.B0"') ? 'yes' : 'no') + ')');
+    libFlush(null);
+  }
+
+  function libFail(why) {
+    lib.state = 'failed';
+    lib.failedAt = U.now();
+    Log.warn('player', 'hls.js unavailable (' + why + '): HLS through the platform player only');
+    libFlush('unavailable');
+  }
+
+  function libFlush(err) {
+    var list = lib.waiters;
+    lib.waiters = [];
+    U.each(list, function (cb) { try { cb(err, err ? null : lib.Hls); } catch (e) { Log.error('player-hls-lib', e); } });
+  }
+
+  /* No copy loaded: HLS stays with the platform player; loading is tried again after 5 minutes. */
+  function libFailed() {
+    if (lib.state === 'failed' && U.now() - lib.failedAt > 300000) lib.state = '';
+    return lib.state === 'failed';
+  }
+
+  /* cb(err, Hls): hls.js, loaded once (site copy, then the CDN copy), each try limited to hlsLoadTimeout. */
+  function hlsReady(cb) {
+    if (libFailed()) { cb('unavailable', null); return; }
+    if (lib.state === 'ready') { cb(null, lib.Hls); return; }
+    lib.waiters.push(cb);
+    if (lib.state === 'loading') return;
+    lib.state = 'loading';
+    var t0 = U.now();
+    if (usableHls(window.Hls)) { libDone(window.Hls, 'page copy', t0); return; }
+    var list = [{ url: Site.resolve(HLS_SITE, origin() + '/'), from: 'site copy' }];
+    if (hlsCdn) list.push({ url: hlsCdn, from: 'CDN copy' });
+    function attempt(i) {
+      if (i >= list.length) { libFail(list.length > 1 ? 'no copy loaded' : 'the site copy did not load'); return; }
+      var tag = document.createElement('script'), done = false, timer = null;
+      function end(ok, why) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        tag.onload = null;
+        tag.onerror = null;
+        if (ok && usableHls(window.Hls)) { libDone(window.Hls, list[i].from, t0); return; }
+        Log.warn('player', 'hls.js ' + list[i].from + ': ' + (ok ? (window.Hls ? 'not supported here' : 'loaded but not visible to the module') : why));
+        attempt(i + 1);
+      }
+      tag.onload = U.guard(function () { end(true, ''); }, 'player-hls-load');
+      tag.onerror = U.guard(function () { end(false, 'did not load'); }, 'player-hls-load');
+      timer = setTimeout(function () { end(false, 'timed out'); }, CFG.hlsLoadTimeout);
+      tag.async = true;
+      tag.setAttribute('data-mbptv', 'hls');
+      tag.src = list[i].url;
+      (document.head || document.documentElement).appendChild(tag);
+    }
+    attempt(0);
+  }
+
+  function verdict() {
+    var v = Store.local.get(HLS_VERDICT, null);
+    return v && typeof v === 'object' && v.ua === String(navigator.userAgent || '') ? String(v.native || '') : '';
+  }
+
+  /* 'native' (the platform player) or 'hlsjs' for this candidate. */
+  function engineFor(c) {
+    if (!c || !c.hls || c.synthetic || /^data:/i.test(String(c.src || ''))) return 'native';
+    if (c.engine) return c.engine;
+    if (hlsMode === 'native' || !mse() || libFailed()) return 'native';
+    if (hlsMode === 'hlsjs' || verdict() === 'refuses') return 'hlsjs';
+    return canPlayProbe()(HLS_MIME) ? 'native' : 'hlsjs';
+  }
+
+  /* After the platform player refused an HLS stream outright, the same stream is tried through hls.js. */
+  function hlsRetryOk() { return hlsMode !== 'native' && mse() && !libFailed(); }
+
+  function destroyHls() {
+    var h = hlsCur;
+    hlsCur = null;
+    if (!h) return;
+    h.dead = true;
+    try { h.hls.destroy(); } catch (e) { Log.info('player', 'hls.js destroy: ' + clean(e)); }
+  }
+
+  function hlsOf(s) { var h = hlsCur; return h && !h.dead && h.s === s && h.tryId === s.tryId ? h : null; }
+
+  /* '4K', '1080p', ... from a level's size (wide films: 1920x800 is 1080p, 2580x1080 too). */
+  function levelName(l) {
+    var w = l && +l.width || 0, ht = l && +l.height || 0;
+    if (!w && !ht) return l && l.bitrate ? Math.round(l.bitrate / 1000) + ' kbps' : '';
+    return w >= 3200 || ht >= 1800 ? '4K' : w >= 1800 || ht >= 1000 ? '1080p' : w >= 1200 || ht >= 700 ? '720p' : w >= 800 || ht >= 460 ? '480p' : '360p';
+  }
+
+  function levelCodec(l) { return String(l && (l.videoCodec || (l.attrs && l.attrs.CODECS)) || ''); }
+  function hevcLevel(l) { return /(?:^|,)\s*(?:hvc1|hev1)/i.test(levelCodec(l)); }
+
+  function hlsLevelNow(h) {
+    var levels = [], i = -1;
+    try { levels = h.hls.levels || []; i = h.hls.currentLevel; } catch (e) { levels = []; }
+    if (!(i >= 0)) i = h.level;
+    return i >= 0 && levels[i] ? levelName(levels[i]) : '';
+  }
+
+  /* AUTO lists the 4K HEVC HDR rendition first: hls.js would start there. Adaptive playback stays on H.264 (the best
+     rendition up to 1080p to start, the best H.264 one at most); 4K is the Quality menu's own choice. */
+  function hlsLevels(h, d) {
+    var levels = d && d.levels || [], hevc = 0, cap = -1, start = -1, i;
+    try { if (!levels.length) levels = h.hls.levels || []; } catch (e) { levels = []; }
+    for (i = 0; i < levels.length; i++) {
+      if (hevcLevel(levels[i])) { hevc++; continue; }
+      cap = i;
+      if ((+levels[i].height || 0) <= 1100) start = i;
+    }
+    if (start < 0) start = cap;
+    var names = U.map(levels, function (l) { return levelName(l) + (hevcLevel(l) ? ' HEVC' : ''); });
+    if (levels.length > 1) {
+      try {
+        if (hevc && cap >= 0) h.hls.autoLevelCapping = cap;
+        if (start >= 0) h.hls.startLevel = start;
+      } catch (e2) { Log.info('player', 'hls.js levels: ' + clean(e2)); }
+    }
+    Log.info('player', 'hls.js: ' + levels.length + (levels.length === 1 ? ' level' : ' levels') + ' [' + names.join(', ') + ']' +
+      (levels.length > 1 && start >= 0 ? ', start ' + names[start] : '') + (levels.length > 1 && hevc && cap >= 0 ? ', HEVC kept for the Quality menu' : ''));
+  }
+
+  function hlsAttach(s, c, H, at, tryId) {
+    var v = ui.video;
+    try { v.removeAttribute('src'); v.load(); } catch (e) {}
+    /* Load from the start position directly (no first segment at 0); a resume outside the resume rules is moved back
+       to 0 at loadedmetadata. */
+    var start = at > 0 && !(s.resumePending && !(at > 10)) ? at : -1;
+    var cfg = {
+      startPosition: start, autoStartLoad: true, enableWorker: true, capLevelToPlayerSize: false, debug: false,
+      backBufferLength: 30, maxBufferLength: 30, maxMaxBufferLength: 60, maxBufferSize: 60 * 1000 * 1000,
+      manifestLoadingTimeOut: 10000, manifestLoadingMaxRetry: 1, levelLoadingTimeOut: 10000, levelLoadingMaxRetry: 2,
+      fragLoadingTimeOut: 20000, fragLoadingMaxRetry: 3
+    };
+    var hls = null;
+    try { hls = new H(cfg); } catch (e2) { s.failNote = 'hls.js: ' + clean(e2); candidateFailed(s, tryId, 'hls-other'); return; }
+    var h = { hls: hls, H: H, s: s, tryId: tryId, c: c, recovered: 0, level: -1, nonFatal: 0, levelLogs: 0, reported: false, audioWant: null, prefDone: false, stopped: false, dead: false };
+    hlsCur = h;
+    var E = H.Events || {};
+    function on(name, fn) {
+      if (!E[name]) return;
+      hls.on(E[name], function (evt, data) {
+        if (hlsCur !== h || h.dead || s !== S || s.finished || s.tryId !== tryId || s.state === 'error') return;
+        try { fn(data || {}); } catch (err) { Log.error('player-hls:' + name, err); }
+      });
+    }
+    on('MANIFEST_PARSED', function (d) { alive(s); hlsLevels(h, d); playVideo(s); });
+    on('LEVEL_LOADED', function () { alive(s); });
+    on('FRAG_LOADED', function () { alive(s); });
+    on('FRAG_BUFFERED', function () { alive(s); });
+    on('LEVEL_SWITCHED', function (d) { hlsLevelSwitched(h, d.level); });
+    on('AUDIO_TRACKS_UPDATED', function () { hlsAudioPref(h); if (s.ready) audioRefresh(s); });
+    on('AUDIO_TRACK_SWITCHED', function (d) { hlsAudioSwitched(h, d.id); });
+    on('ERROR', function (d) { hlsError(h, d); });
+    hls.attachMedia(v);
+    hls.loadSource(c.src);
+  }
+
+  function hlsLevelSwitched(h, index) {
+    h.level = index;
+    if (!h.reported || h.levelLogs >= 12) return;
+    h.levelLogs++;
+    var name = hlsLevelNow(h);
+    if (name) Log.info('player', 'hls.js level ' + name);
+  }
+
+  /* Fatal hls.js errors end the candidate (the usual fallback order follows); a media error is recovered once first. */
+  function hlsError(h, d) {
+    var s = h.s, T = h.H.ErrorTypes || {}, type = String(d.type || ''), det = String(d.details || '').slice(0, 60);
+    var code = d.response && d.response.code ? toInt(d.response.code) : 0;
+    var desc = 'hls.js ' + type + '/' + det + (code ? ' http ' + code : '');
+    if (!d.fatal) {
+      h.nonFatal++;
+      if (h.nonFatal <= 3) Log.info('player', desc + ' (hls.js retries)');
+      return;
+    }
+    var media = type === (T.MEDIA_ERROR || 'mediaError'), codecs = /IncompatibleCodecs|AddCodecError/i.test(det);
+    if (media && !codecs && h.recovered < 1) {
+      h.recovered++;
+      Log.warn('player', desc + ': recovering once');
+      try { h.hls.recoverMediaError(); } catch (e) { Log.warn('player', 'hls.js recover: ' + clean(e)); }
+      return;
+    }
+    var reason = type === (T.NETWORK_ERROR || 'networkError') ? (/TimeOut/i.test(det) ? 'timeout' : 'hls-network') :
+      media ? (codecs ? 'hls-format' : 'hls-media') : 'hls-other';
+    s.failNote = desc;
+    candidateFailed(s, h.tryId, reason);
+  }
+
+  /* The video element reported an error while hls.js feeds it: recover once, as hls.js recommends. */
+  function hlsMediaError(s, h, code) {
+    if (h.recovered < 1) {
+      h.recovered++;
+      Log.warn('player', 'media error ' + code + ' under hls.js: recovering once');
+      try { h.hls.recoverMediaError(); } catch (e) { Log.warn('player', 'hls.js recover: ' + clean(e)); }
+      return;
+    }
+    s.failNote = 'hls.js media error ' + code;
+    candidateFailed(s, s.tryId, 'media-' + code);
+  }
+
+  function hlsAudioTracks(h) { try { var t = h.hls.audioTracks; return t && typeof t.length === 'number' ? t : []; } catch (e) { return []; } }
+  function hlsAudioIndex(h) { try { var i = h.hls.audioTrack; return typeof i === 'number' ? i : -1; } catch (e) { return -1; } }
+
+  function hlsAudioCode(h) {
+    var t = hlsAudioTracks(h), i = hlsAudioIndex(h), x = i >= 0 ? t[i] : null;
+    return x ? (langCode(x.lang) || langCode(String(x.name || '').split(/[\s(#]/)[0]) || U.text(x.name || x.lang || '')).slice(0, 12) : '';
+  }
+
+  /* The remembered audio language (Prefs audioLang), chosen as soon as hls.js knows the tracks: no switch later. */
+  function hlsAudioPref(h) {
+    var s = h.s;
+    if (h.prefDone || !hlsAudioTracks(h).length) return;
+    h.prefDone = true;
+    var want = prefAudio();
+    if (!want) return;
+    s.audio.prefTry = s.tryId; /* decided here, not again in audioRefresh */
+    /* Next tick: hls.js picks its initial track right after this event (1.4 would undo an earlier choice, and the
+       track playing is only known then). */
+    U.later(function () {
+      if (hlsCur !== h || h.dead || s !== S || s.finished) return;
+      var o = audioPost('hlsjs', hlsAudioRaw(h)), at = o ? audioMatch(o, want) : -1, it = at >= 0 ? o.items[at] : null;
+      if (!it || it.index === hlsAudioIndex(h)) return;
+      Log.info('player', 'audio: the remembered language (' + want + ') from the start, via hls.js');
+      h.audioWant = { index: it.index, title: it.title, how: 'auto' };
+      try { h.hls.audioTrack = it.index; } catch (e) { Log.warn('player', 'audio: ' + clean(e)); }
+    }, 0, 'player-hls-audio');
+  }
+
+  function hlsAudioSwitched(h, id) {
+    var s = h.s, w = h.audioWant;
+    if (w && w.index === id) {
+      h.audioWant = null;
+      cancel(s, 'audioverify');
+      Log.info('player', 'audio: switched');
+      if (w.how === 'user') showChip(s, 'Audio: ' + w.title, 2500, false);
+    }
+    if (s.ready) audioRefresh(s);
+  }
+
+  /* Background: hls.js stops loading while the app is hidden and carries on from the position when it comes back. */
+  function hlsPause(s, stop) {
+    var h = hlsOf(s);
+    if (!h || h.stopped === stop) return;
+    h.stopped = stop;
+    try { if (stop) h.hls.stopLoad(); else h.hls.startLoad(ui.video.currentTime || -1); } catch (e) { Log.info('player', 'hls.js ' + (stop ? 'stop' : 'start') + ': ' + clean(e)); }
   }
 
   /* ---------- player data parsing (regexes only; never evaluated) ---------- */
@@ -490,7 +774,12 @@ var NativePlayer = (function () {
 
   /* ---------- stream order ---------- */
 
-  function rank(label) { var m = /(\d{3,4})p/i.exec(String(label || '')); return m ? toInt(m[1]) : 0; }
+  /* Fixed rendition labels: '1080p' -> 1080, '4K' -> 2160 (4K files add a '4K' HEVC HDR rendition); 0 = not fixed. */
+  function rank(label) {
+    var l = String(label || ''), m = /(\d{3,4})p/i.exec(l);
+    if (m) return toInt(m[1]);
+    return /^8k$/i.test(l) ? 4320 : /^4k$/i.test(l) ? 2160 : 0;
+  }
 
   function withAac(u) {
     u = String(u || '');
@@ -506,32 +795,62 @@ var NativePlayer = (function () {
     return !!cp(MIME.h264);
   }
 
-  /* TV: AUTO HLS, then the MP4 files (ORG first), then the fixed HLS renditions from the highest down.
-     Elsewhere: MP4s the browser says it can decode, AUTO, fixed HLS, then the remaining MP4s as a last resort. */
+  function pathOf(u) { var m = /^[a-z]+:\/\/[^\/?#]*([^?#]*)/i.exec(String(u || '')); return m ? m[1] : ''; }
+
+  /* The site's placeholder for accounts without VIP (its player checks for it too). */
+  function vipOnly(s) { return /\/video\/vip_only\.mp4$/i.test(pathOf(s.src)); }
+
+  /* Size in GB from the file list's "14.7 GB" text (0 when unknown). */
+  function sizeGb(v) {
+    var m = /([\d.]+)\s*(KB|MB|GB|TB)/i.exec(String(v || ''));
+    if (!m) return 0;
+    var n = num(m[1]), u = m[2].toUpperCase();
+    return u === 'TB' ? n * 1024 : u === 'GB' ? n : u === 'MB' ? n / 1024 : n / 1048576;
+  }
+
+  /* How an original file is likely to fare in a TV's built-in player (docs/PLAYER.md "Stream order"):
+     'risky' = Matroska whose name says DTS or TrueHD audio (Samsung and LG TVs do not decode them: no sound or an
+     error) or a file heavier than 20 GB (4K remuxes run at 60-90 Mbit/s and stall on home Wi-Fi); 'mkv' = other
+     Matroska files (usually EAC3/AC3/AAC, which TVs decode, but the container is less certain than MP4); 'mp4'. */
+  function fileKind(s, env) {
+    var mkv = /\.mkv$/i.test(pathOf(s.src)), name = String(env && env.fileName || '');
+    if (sizeGb(env && env.fileSize) > 20) return 'risky';
+    if (mkv && /(?:^|[^a-z])(?:DTS|TrueHD)(?:[^a-z]|$)/i.test(name)) return 'risky';
+    return mkv ? 'mkv' : 'mp4';
+  }
+
+  /* TV: AUTO HLS (what the website itself plays on Samsung/LG TVs), then an MP4 original, then the 1080p HLS, then a
+     Matroska original, the lower HLS renditions, the 4K HLS, and last an original the TV probably cannot play. With
+     Media Source Extensions (env.mse: hls.js can play every HLS rendition) Matroska originals come after the HLS ones.
+     Elsewhere: originals the browser says it can decode, AUTO, fixed HLS (highest first), then the other originals.
+     The site's VIP placeholder is never a candidate. env.fileName / env.fileSize describe the file (risk rules). */
   function order(sources, env) {
     env = env || environment();
-    var auto = [], org = [], mp4 = [], fixed = [], other = [];
+    var auto = [], files = [], fixed = [], other = [];
     U.each(sources || [], function (s) {
-      if (!s || !s.src) return;
+      if (!s || !s.src || vipOnly(s)) return;
       if (s.hls && s.label === 'AUTO') auto.push(s);
       else if (s.hls && rank(s.label)) fixed.push(s);
-      else if (!s.hls && s.label === 'ORG') org.push(s);
-      else if (!s.hls) mp4.push(s);
+      else if (!s.hls) files.push(s);
       else other.push(s);
     });
     fixed.sort(function (a, b) { return rank(b.label) - rank(a.label); });
-    mp4 = org.concat(mp4);
+    files.sort(function (a, b) { return (a.label === 'ORG' ? 0 : 1) - (b.label === 'ORG' ? 0 : 1); });
     var list;
-    if (env.tv) list = auto.concat(mp4, fixed, other);
-    else {
+    if (env.tv) {
+      var mp4 = [], mkv = [], risky = [], hd = [], uhd = [];
+      U.each(files, function (s) { var k = fileKind(s, env); (k === 'mp4' ? mp4 : k === 'mkv' ? mkv : risky).push(s); });
+      U.each(fixed, function (s) { (rank(s.label) > 1080 ? uhd : hd).push(s); });
+      list = env.mse ? auto.concat(mp4, hd, uhd, other, mkv, risky) : auto.concat(mp4, hd.slice(0, 1), mkv, hd.slice(1), uhd, other, risky);
+    } else {
       var yes = [], no = [];
-      U.each(mp4, function (s) { if (playable(s, env)) yes.push(s); else no.push(s); });
+      U.each(files, function (s) { if (playable(s, env) && fileKind(s, env) !== 'risky') yes.push(s); else no.push(s); });
       list = yes.concat(auto, fixed, other, no);
     }
     list = preferred(list, env.prefer);
     return U.map(list, function (s) {
       return { label: s.label, src: s.hls && env.aac ? withAac(s.src) : s.src, hls: !!s.hls, h265: !!s.h265, hdr: !!s.hdr,
-        width: s.width || 0, height: s.height || 0, fps: s.fps || 0 };
+        width: s.width || 0, height: s.height || 0, fps: s.fps || 0, kind: s.hls ? 'hls' : fileKind(s, env) };
     });
   }
 
@@ -629,6 +948,13 @@ var NativePlayer = (function () {
       introEnd: 0, creditsAt: 0, osd: false, area: 'scrub', btn: 'play-pause', btnSig: '', seek: null, seekKey: null,
       upnext: null, dismissedNext: false, nextInfo: null, nextFetching: false, sheet: null, err: null, chipStartOver: false,
       buffering: false, waitAt: 0, switchNote: '', bgPaused: false, ended: false, lastRender: 0, timers: {}, reqs: [], offs: [], finished: false,
+      /* fails: what each candidate of the current player data did ([{label, reason}], for the error card); switching:
+         a quality the viewer chose, verified when something plays; seekCheck: a position that must be reached */
+      fails: [], candStart: 0, lastBuf: 0, switching: null, seekCheck: null,
+      /* engine: 'native' (the platform player) or 'hlsjs' for the current candidate; failNote: detail for its failure log */
+      engine: 'native', failNote: '',
+      /* audio languages: method 'tracks' (video.audioTracks) or 'manifest' (a rewritten HLS master), the master's list */
+      audio: { master: null, fetching: '', unread: '', prefTry: -1, pending: null },
       /* subtitles: the site's list, the chosen file (sel), its cues once loaded, a load sequence and a per-session cache */
       subs: { langs: [], sel: null, cues: null, delay: 0, seq: 0, loading: 0, cache: {}, sig: '', decided: false, note: '' }
     };
@@ -710,8 +1036,10 @@ var NativePlayer = (function () {
       s.files = html ? filesIn(U.parseHTML('<ul>' + html + '</ul>')) : [];
       Log.info('player', 'episode files ' + s.files.length);
       if (!s.files.length) { showError(s, 'no-files', 'This episode has no playable files yet.'); return; }
-      s.fileIndex = 0;
-      loadPlayer(s, 0);
+      /* The first file, unless a file was asked for (Try another file, the quality sheet's files). */
+      var fi = parseInt(s.req.fileIndex, 10);
+      s.fileIndex = !isNaN(fi) && fi >= 0 && fi < s.files.length ? fi : 0;
+      loadPlayer(s, s.fileIndex);
     }, 'player-tv-file'));
   }
 
@@ -744,6 +1072,11 @@ var NativePlayer = (function () {
         }
         return;
       }
+      if (!U.find(d.sources, function (x) { return !vipOnly(x); })) {
+        Log.warn('player', 'player data: VIP placeholder only');
+        showError(s, 'site-error', 'This title needs a MovieBox Pro VIP account. The website can tell you more.');
+        return;
+      }
       mark(s, 'data');
       applyData(s, d);
       var at = s.resumeAt > 0 ? s.resumeAt : d.seconds;
@@ -773,9 +1106,13 @@ var NativePlayer = (function () {
     s.next = s.kind === 'tv' && d.next ? d.next : null;
     s.introEnd = d.skips.start > 0 ? d.skips.start : 0;
     s.creditsAt = d.skips.end > 0 ? d.skips.end : 0;
-    s.cands = order(d.sources, environment());
+    s.cands = order(d.sources, environment(s.files[s.fileIndex]));
     s.base = s.cands.slice();
     s.failed = {};
+    s.fails = [];
+    s.switching = null;
+    s.audio.master = null;
+    s.audio.pending = null;
     if (!s.started) s.lastSent = Math.floor(d.seconds) + ':0';
     renderTitles(s);
     s.btnSig = '';
@@ -813,8 +1150,10 @@ var NativePlayer = (function () {
     return {
       kind: s.kind, id: s.id, season: s.season, episode: s.episode, time: Math.round(pos(s) * 10) / 10,
       duration: Math.round(d * 10) / 10, paused: paused(), stream: c ? (c.hls ? 'hls' : 'mp4') : '', label: c ? c.label : '',
+      engine: c ? (s.engine === 'hlsjs' ? 'hls.js' : 'native') : '', level: hlsOf(s) ? hlsLevelNow(hlsOf(s)) : '',
       state: s.state, started: s.started, file: s.fileIndex,
-      subtitle: s.subs && s.subs.sel && s.subs.cues ? subLabel(s, s.subs.sel.li, s.subs.sel.fi) : ''
+      subtitle: s.subs && s.subs.sel && s.subs.cues ? subLabel(s, s.subs.sel.li, s.subs.sel.fi) : '',
+      audio: s.ready && ui ? audioCurrent(audioOptions(s)) : ''
     };
   }
 
@@ -832,33 +1171,71 @@ var NativePlayer = (function () {
   function marksText(s) {
     var m = s.marks || {}, out = [];
     U.each(['data', 'src', 'meta', 'seek', 'seeked', 'canplay'], function (k) { if (m.hasOwnProperty(k)) out.push(k + ' ' + (m[k] / 1000).toFixed(1)); });
-    if (s.ci > 0) out.push('stream ' + (s.ci + 1) + ' of ' + s.cands.length);
+    /* hls.js retries of a stream the platform player refused count as that stream */
+    var n = 0, at = 0;
+    U.each(s.cands, function (c, i) { if (!c.afterNative) n++; if (i <= s.ci && !c.afterNative) at = n; });
+    if (at > 1) out.push('stream ' + at + ' of ' + n);
+    if (s.engine === 'hlsjs') out.push('hls.js');
     return out.join(', ');
   }
 
   function startCandidate(s, i, at, why) {
-    cancel(s, 'cand'); cancel(s, 'stall');
+    cancel(s, 'cand'); cancel(s, 'candmax'); cancel(s, 'stall');
     var c = s.cands[i];
     if (!c) { streamsFailed(s, at); return; }
-    s.ci = i; s.ready = false; s.pendingAt = at > 0 ? at : 0; s.tryId++; s.userPaused = false;
-    var tryId = s.tryId;
-    Log.info('player', 'try ' + c.label + ' (' + (c.hls ? 'hls' : 'mp4') + ')' + (at > 0 ? ' at ' + Math.round(at) : '') + (why ? ' after ' + why : ''));
+    s.ci = i; s.ready = false; s.pendingAt = at > 0 ? at : 0; s.tryId++; s.userPaused = false; s.failNote = '';
+    var tryId = s.tryId, engine = engineFor(c);
+    s.engine = engine;
+    Log.info('player', 'try ' + c.label + ' (' + (c.hls ? (engine === 'hlsjs' ? 'hls.js' : 'hls') : 'mp4') + ')' + (at > 0 ? ' at ' + Math.round(at) : '') + (why ? ' after ' + why : ''));
     if (!s.started) setStatus(s, i === 0 ? 'Starting playback\u2026' : 'Trying another stream\u2026');
     else setBuffering(s, true);
     var v = ui.video;
+    destroyHls();
     try { v.pause(); } catch (e) {}
     mark(s, 'src');
-    try { v.src = c.src; v.load(); } catch (e2) { candidateFailed(s, tryId, 'exception'); return; }
-    playVideo(s);
+    if (engine === 'hlsjs') {
+      hlsReady(safe(s, function (err, H) {
+        if (s.tryId !== tryId || s.state === 'error') return;
+        if (err || !H) {
+          /* No hls.js here: a stream the platform player already refused fails as it did; others play natively. */
+          s.engine = 'native';
+          if (c.afterNative) { s.failNote = 'hls.js unavailable'; candidateFailed(s, tryId, c.nativeReason || 'media-4'); return; }
+          nativeSrc(s, c, tryId);
+          return;
+        }
+        alive(s);
+        hlsAttach(s, c, H, at, tryId);
+      }, 'player-hls'));
+    } else if (!nativeSrc(s, c, tryId)) return;
     armCandidate(s);
     renderBadges(s);
     s.btnSig = '';
   }
 
-  /* Each candidate must reach "playing" within candidateTimeout. Metadata alone is not enough: an HLS manifest can
-     load while its segments hang or are refused. Not while autoplay is blocked (waiting for OK), nor when the
-     viewer paused a stream that has loaded. */
+  function nativeSrc(s, c, tryId) {
+    var v = ui.video;
+    try { v.src = c.src; v.load(); } catch (e) { candidateFailed(s, tryId, 'exception'); return false; }
+    playVideo(s);
+    return true;
+  }
+
+  /* Each candidate must reach "playing". Metadata alone is not enough: an HLS manifest can load while its segments
+     hang or are refused. A candidate fails after candidateTimeout without any sign of life (metadata, data, seeked,
+     canplay, more buffered: see alive()), and after candidateMax in any case, so a slow start that keeps progressing
+     (a resume seek on a TV takes 5-10 s) is not thrown away. Not while autoplay is blocked (waiting for OK), nor
+     when the viewer paused a stream that has loaded. */
   function armCandidate(s) {
+    var tryId = s.tryId;
+    s.candStart = U.now();
+    s.lastBuf = 0;
+    armQuiet(s);
+    later(s, 'candmax', function () {
+      if (s.tryId !== tryId || s.playedTry === tryId || s.blocked || (s.ready && s.userPaused)) return;
+      candidateFailed(s, tryId, s.ready ? 'no-start' : 'timeout');
+    }, CFG.candidateMax);
+  }
+
+  function armQuiet(s) {
     var tryId = s.tryId;
     later(s, 'cand', function () {
       if (s.tryId !== tryId || s.playedTry === tryId || s.blocked || (s.ready && s.userPaused)) return;
@@ -866,17 +1243,61 @@ var NativePlayer = (function () {
     }, CFG.candidateTimeout);
   }
 
+  /* A starting candidate showed a sign of life: its quiet-time limit starts again. */
+  function alive(s) {
+    if (s.playedTry === s.tryId || !s.timers.cand || s.state === 'error') return;
+    armQuiet(s);
+  }
+
+  /* Format errors: the platform player rejected the stream itself (not the network). */
+  function formatError(reason) { return /^media-[34]$|^play-NotSupported|^hls-format$/.test(String(reason || '')); }
+
   function candidateFailed(s, tryId, reason) {
     if (s !== S || s.finished || s.tryId !== tryId || s.state === 'error' || s.relinking) return;
-    var c = s.cands[s.ci];
-    Log.warn('player', 'stream ' + (c ? c.label : '?') + ' failed: ' + reason);
-    if (c) s.failed[c.label] = true;
+    var c = s.cands[s.ci], note = s.failNote, viaHls = s.engine === 'hlsjs';
+    s.failNote = '';
+    Log.warn('player', 'stream ' + (c ? c.label + (c.synthetic ? ' (audio)' : '') + (viaHls ? ' [hls.js]' : '') : '?') + ' failed: ' + reason +
+      (c ? ' after ' + ((U.now() - s.candStart) / 1000).toFixed(1) + ' s' : '') + (note ? ' (' + clean(note) + ')' : '') + mediaState());
     var v = ui.video, at = s.ready ? (v.currentTime > 0 ? v.currentTime : s.lastTime) : s.pendingAt;
-    if (s.started && s.ready) {
+    /* The platform player refused an HLS stream outright (Samsung Tizen 9: media error 4): the same stream through
+       hls.js next, at the same position. */
+    if (c && c.hls && !c.synthetic && !viaHls && !s.ready && formatError(reason) && hlsRetryOk()) {
+      var copy = {}, k;
+      for (k in c) if (c.hasOwnProperty(k)) copy[k] = c[k];
+      copy.engine = 'hlsjs';
+      copy.afterNative = true;
+      copy.nativeReason = reason;
+      Log.info('player', 'the platform player refused ' + c.label + ' (' + reason + '): trying it through hls.js');
+      s.cands.splice(s.ci + 1, 0, copy);
+      startCandidate(s, s.ci + 1, at, reason);
+      return;
+    }
+    if (c && !c.synthetic) { s.failed[c.label] = true; s.fails.push({ label: c.label, reason: reason }); }
+    if (s.started && s.ready && !(c && c.synthetic) && !s.switching) {
       report(s, 'switch');
       s.switchNote = 'Playback hiccup \u2014 switched to a backup stream';
     }
+    /* The TV's player refused an HLS stream before it even loaded: the other HLS renditions are built the same way,
+       so the MP4 originals go next. */
+    if (c && c.hls && !c.synthetic && !s.ready && formatError(reason)) promoteFiles(s);
     startCandidate(s, s.ci + 1, at, reason);
+  }
+
+  function promoteFiles(s) {
+    var head = s.cands.slice(0, s.ci + 1), rest = s.cands.slice(s.ci + 1), files = [], others = [];
+    U.each(rest, function (c) { if (!c.hls && c.kind === 'mp4') files.push(c); else others.push(c); });
+    if (files.length && others.length && U.indexOf(rest, files[0]) > 0) {
+      Log.info('player', 'the TV refused HLS: trying the original file next');
+      s.cands = head.concat(files, others);
+    }
+  }
+
+  /* For the log: the video element's error message and states (Tizen and webOS put their player's reason there). */
+  function mediaState() {
+    var v = ui && ui.video;
+    if (!v) return '';
+    var e = v.error, msg = e && e.message ? ' "' + clean(e.message).slice(0, 80) + '"' : '';
+    return ' (ready ' + v.readyState + ', net ' + v.networkState + msg + ')';
   }
 
   /* Every candidate failed. Mid-film this is usually the signed, time-limited stream links expiring, so fresh player
@@ -909,10 +1330,30 @@ var NativePlayer = (function () {
       });
       return;
     }
-    Log.warn('player', 'every stream failed');
+    Log.warn('player', 'every stream failed: ' + U.map(s.fails, function (f) { return f.label + ' ' + f.reason; }).join(', '));
     s.lastTime = at;
-    showError(s, 'streams-failed', s.started ? 'The video stopped and none of its streams would start again. Check your connection and try again.' :
-      'None of the available streams would play on this TV. The website\u2019s own player may still work.');
+    showError(s, 'streams-failed', failMessage(s), failCode(s));
+  }
+
+  var REASONS = { 'media-1': 'stopped', 'media-2': 'network error', 'media-3': 'couldn\u2019t decode', 'media-4': 'format not supported',
+    timeout: 'no answer', 'no-start': 'didn\u2019t start', stall: 'stalled', exception: 'refused', 'hls-format': 'format not supported',
+    'hls-network': 'network error', 'hls-media': 'couldn\u2019t decode', 'hls-other': 'refused' };
+  function reasonText(r) { return REASONS[r] || (/^play-/.test(r) ? 'refused' : r); }
+
+  /* The error card's text, from what the candidates did. */
+  function failMessage(s) {
+    var n = s.fails.length, fmt = 0, slow = 0, more = s.files.length > 1 ? ' Try another file of this title, or the website\u2019s player.' : ' The website\u2019s own player may still work.';
+    U.each(s.fails, function (f) { if (formatError(f.reason)) fmt++; else if (/^(?:timeout|stall|no-start|media-2|hls-network)$/.test(f.reason)) slow++; });
+    if (s.started) return 'The video stopped and none of its streams would start again. Check your connection and try again.';
+    if (n && fmt === n) return 'This TV can\u2019t play the video or audio format of this file.' + more;
+    if (n && slow === n) return 'The streams didn\u2019t load in time. Your connection may be slow, or MovieBox Pro\u2019s servers are busy. Try again in a moment.';
+    return 'None of the available streams would play on this TV.' + more;
+  }
+
+  function failCode(s) {
+    var seen = {}, parts = [];
+    U.each(s.fails, function (f) { var k = f.label + f.reason; if (!seen[k] && parts.length < 6) { seen[k] = true; parts.push(displayLabel(f.label) + ': ' + reasonText(f.reason)); } });
+    return parts.length ? 'Tried ' + parts.join(' \u00b7 ') : '';
   }
 
   function playVideo(s) {
@@ -939,6 +1380,7 @@ var NativePlayer = (function () {
   }
 
   function releaseVideo() {
+    destroyHls();
     var v = ui && ui.video;
     if (!v) return;
     try { v.pause(); } catch (e) {}
@@ -986,18 +1428,31 @@ var NativePlayer = (function () {
       s.pendingAt = 0;
       if (s.resumePending) {
         s.resumePending = false;
-        if (at > 10 && d > 0 && at < d - 60) { mark(s, 'seek'); seekTo(s, at); s.resumed = at; } else s.lastTime = 0;
+        if (at > 10 && d > 0 && at < d - 60) { mark(s, 'seek'); seekTo(s, at); s.resumed = at; } else {
+          s.lastTime = 0;
+          if (ui.video.currentTime > 1) seekTo(s, 0); /* hls.js may have started at the saved position */
+        }
       } else if (at > 0 && d > 0) seekTo(s, Math.min(at, d - 1));
+      /* Native HLS players can ignore a seek made this early (and start at 0): checked once it plays. */
+      s.seekCheck = s.lastTime > 1 ? { target: s.lastTime, tries: 0, at: U.now() } : null;
       if (s.blocked) reveal(s);
+      alive(s);
+      audioRefresh(s);
       render(s);
     });
+    on('loadeddata', function (s) { alive(s); });
     on('playing', function (s) {
+      var first = s.playedTry !== s.tryId;
       s.ready = true;
       s.blocked = false;
       s.userPaused = false;
       s.playedTry = s.tryId;
+      if (first) engineLine(s);
       s.playedSinceRelink = true;
       cancel(s, 'cand');
+      cancel(s, 'candmax');
+      checkSeek(s);
+      switchOutcome(s);
       setBuffering(s, false);
       keepAwake(true);
       if (!s.started) {
@@ -1021,6 +1476,7 @@ var NativePlayer = (function () {
       if (s.osd) scheduleHide(s);
       render(s);
       subTick(s);
+      audioRefresh(s);
       /* It started while the app is in the background: hold it there (see toBackground). */
       if (isHidden()) toBackground(s);
     });
@@ -1045,22 +1501,93 @@ var NativePlayer = (function () {
     on('timeupdate', function (s) {
       if (!s.ready) return;
       var t = ui.video.currentTime;
-      if (!ui.video.seeking && t > 0) s.lastTime = t;
+      if (s.seekCheck) checkSeek(s);
+      if (!ui.video.seeking && t > 0 && !s.seekCheck) s.lastTime = t;
       if (s.buffering && Math.abs(t - s.waitAt) >= 0.5) { setBuffering(s, false); cancel(s, 'stall'); }
       if (U.now() - s.lastRender >= 250) render(s);
       checkUpNext(s);
       subTick(s);
     });
-    on('progress', function (s) { if (s.osd && U.now() - s.lastRender >= 250) render(s); });
+    on('progress', function (s) {
+      if (s.playedTry !== s.tryId) {
+        /* Data arriving counts as life: before metadata a large original (MP4 index at the end of the file) is still
+           being read; after it, more is buffered. */
+        var b = bufferedEnd(ui.video);
+        if (!s.ready) alive(s);
+        else if (b > s.lastBuf + 0.25) { s.lastBuf = b; alive(s); }
+      }
+      if (s.osd && U.now() - s.lastRender >= 250) render(s);
+    });
     on('durationchange', function (s) { var d = dur(); if (d > 0) s.lastDur = d; render(s); });
-    on('seeked', function (s) { mark(s, 'seeked'); render(s); subTick(s); });
-    on('canplay', function (s) { mark(s, 'canplay'); });
+    on('seeked', function (s) { mark(s, 'seeked'); alive(s); render(s); subTick(s); });
+    on('canplay', function (s) { mark(s, 'canplay'); alive(s); });
     on('ended', function (s) { onEnded(s); });
+    var tl = null;
+    try { tl = v.audioTracks; } catch (e) { tl = null; }
+    if (tl && typeof tl.addEventListener === 'function') {
+      U.each(['addtrack', 'removetrack', 'change'], function (type) {
+        ui.offs.push(U.on(tl, type, function () { var s = S; if (s && !s.finished && s.state !== 'error' && s.ready) audioRefresh(s); }));
+      });
+    }
     on('error', function (s) {
-      var v2 = ui.video, code = v2 && v2.error ? v2.error.code : 0;
+      var v2 = ui.video, code = v2 && v2.error ? v2.error.code : 0, h = hlsOf(s);
+      if (h) { hlsMediaError(s, h, code); return; }
       if (!v2 || !v2.getAttribute('src')) return;
       candidateFailed(s, s.tryId, 'media-' + code);
     });
+  }
+
+  function bufferedEnd(v) {
+    try { var b = v.buffered; return b && b.length ? b.end(b.length - 1) : 0; } catch (e) { return 0; }
+  }
+
+  /* A position set at loadedmetadata (resume, quality or file switch, fresh links) must actually be reached: some
+     native HLS players start from 0 instead. Checked when it plays; seeks again at most twice. */
+  function checkSeek(s) {
+    var k = s.seekCheck, v = ui && ui.video;
+    if (!k || !v || v.seeking || !s.ready) return;
+    var t = v.currentTime;
+    if (U.now() - k.at > 60000 || Math.abs(t - k.target) <= CFG.seekSlack) { s.seekCheck = null; return; }
+    if (k.tries >= 2) {
+      s.seekCheck = null;
+      Log.warn('player', 'position not applied: at ' + Math.round(t) + ' instead of ' + Math.round(k.target));
+      return;
+    }
+    k.tries++;
+    Log.info('player', 'at ' + Math.round(t) + ' instead of ' + Math.round(k.target) + ': seeking again');
+    seekTo(s, k.target);
+  }
+
+  /* One line per stream that starts playing: which engine, which stream, and with hls.js the level and audio. */
+  function engineLine(s) {
+    var c = s.cands[s.ci], h = hlsOf(s), parts = [];
+    if (!c) return;
+    if (h) {
+      h.reported = true;
+      parts.push('engine hls.js ' + lib.version + ' (' + lib.from + ')', c.label);
+      var lv = hlsLevelNow(h), au = hlsAudioCode(h);
+      if (lv) parts.push(lv + ' level');
+      if (au) parts.push('audio ' + au);
+      if (c.afterNative && verdict() !== 'refuses') {
+        Store.local.set(HLS_VERDICT, { ua: String(navigator.userAgent || ''), native: 'refuses', at: U.now() });
+        Log.info('player', 'the platform player refuses HLS here: hls.js from now on (remembered)');
+      }
+    } else parts.push('engine native', c.label + (c.hls ? ' (HLS)' : c.kind && c.kind !== 'hls' ? ' (' + c.kind + ')' : ''));
+    Log.info('player', parts.join(' \u00b7 '));
+  }
+
+  /* The viewer's quality or audio choice took effect, or another stream took over: say which. */
+  function switchOutcome(s) {
+    var c = s.cands[s.ci], sw = s.switching, au = s.audio.pending;
+    if (sw) {
+      s.switching = null;
+      if (c && c.label === sw.label) s.switchNote = 'Quality: ' + displayLabel(sw.label);
+      else {
+        Log.warn('player', 'quality ' + sw.label + ' did not play; ' + (c ? c.label : '?') + ' instead');
+        s.switchNote = displayLabel(sw.label) + ' didn\u2019t play on this TV \u2014 playing ' + displayLabel(c ? c.label : '') + ' instead';
+      }
+    }
+    if (au) audioOutcome(s, c, au);
   }
 
   function setBuffering(s, on) {
@@ -1101,6 +1628,7 @@ var NativePlayer = (function () {
       s.bgPaused = true;
       s.userPaused = true;
       try { ui.video.pause(); } catch (e) {}
+      hlsPause(s, true);
     }
     keepAwake(false);
   }
@@ -1108,6 +1636,7 @@ var NativePlayer = (function () {
   function fromBackground(s) {
     if (!s.bgPaused) return;
     s.bgPaused = false;
+    hlsPause(s, false);
     if (s.state === 'playing' && !(s.upnext && s.upnext.visible)) { showOsd(s); render(s); }
   }
 
@@ -1380,7 +1909,7 @@ var NativePlayer = (function () {
     if (c.label === 'AUTO') out.push('Auto');
     else if (c.label === 'ORG') out.push(c.height >= 2000 || c.width >= 3800 ? '4K' : c.height >= 1000 || c.width >= 1900 ? '1080p' : 'Original');
     else out.push(c.label);
-    if (c.hdr) out.push('HDR');
+    if (c.hdr && (c.label === 'ORG' || rank(c.label) >= 2160)) out.push('HDR');
     return out;
   }
 
@@ -1535,6 +2064,8 @@ var NativePlayer = (function () {
     if (introActive(s)) list.push({ action: 'skip-intro', icon: 'skip', label: 'Skip Intro' });
     if (s.next) list.push({ action: 'next-episode', icon: 'next', label: 'Next Episode', value: s.next.season === s.season ? 'E' + s.next.episode : 'S' + s.next.season + ' E' + s.next.episode });
     if (qualityOptions(s).length > 1 || s.files.length > 1) list.push({ action: 'quality', icon: 'quality', label: 'Quality', value: c ? displayLabel(c.label) : '' });
+    var ao = s.state === 'playing' ? audioOptions(s) : null;
+    if (ao) list.push({ action: 'audio', icon: 'audio', label: 'Audio', value: audioCurrent(ao) });
     if (s.subs.langs.length) list.push({ action: 'subtitles', icon: 'subtitles', label: 'Subtitles', value: subValue(s) });
     list.push({ action: 'start-over', icon: 'restart', label: 'Start over' });
     return list;
@@ -1573,6 +2104,7 @@ var NativePlayer = (function () {
       case 'next-episode': playNext(s, 'button'); return;
       case 'quality': openSheet(s); return;
       case 'subtitles': openSubSheet(s); return;
+      case 'audio': openAudioSheet(s); return;
       case 'start-over': startOver(s); return;
     }
   }
@@ -1609,6 +2141,7 @@ var NativePlayer = (function () {
     var at = introPoint(s, dur());
     if (!(at > 0)) return;
     Log.info('player', 'skip intro to ' + Math.round(at));
+    s.seekCheck = null;
     seekTo(s, at);
     later(s, 'seekreport', function () { report(s, 'seek'); }, CFG.seekReport);
     render(s);
@@ -1616,6 +2149,7 @@ var NativePlayer = (function () {
 
   function startOver(s) {
     Log.info('player', 'start over');
+    s.seekCheck = null;
     hideChip(s);
     seekTo(s, 0);
     if (paused()) playVideo(s);
@@ -1652,6 +2186,7 @@ var NativePlayer = (function () {
     if (!s.seek) return;
     var target = s.seek.target;
     s.seek = null;
+    s.seekCheck = null;
     s.seekKey = null;
     flag(ui.root, 'is-seeking', false);
     seekTo(s, target);
@@ -1664,22 +2199,31 @@ var NativePlayer = (function () {
 
   /* ---------- sheets (quality, subtitles): one side sheet, filled per kind ---------- */
 
+  /* The site copies the 1080p size onto lower renditions ("720p 1916 x 1080"): show a size only when it fits. */
+  function sizeFits(c, r) {
+    if (!(c.width > 0 && c.height > 0)) return false;
+    if (!r) return true;
+    return c.height <= r * 1.1 && Math.max(c.height, c.width / 2.4) >= r * 0.6;
+  }
+
   function openSheet(s) {
     var items = [], cur = s.cands[s.ci];
     U.each(qualityOptions(s), function (c) {
       var meta = [], r = rank(c.label);
+      if (s.failed[c.label]) meta.push('Didn\u2019t play here');
       if (c.label === 'AUTO') meta.push('Adapts to your connection');
-      else if (c.label === 'ORG') meta.push('Best picture');
+      else if (c.label === 'ORG') meta.push(c.kind === 'risky' ? 'Original file \u00b7 may not play on a TV' : 'Original file');
+      else if (r >= 2160) meta.push('4K \u00b7 needs a fast connection');
       else if (r >= 1080) meta.push('Full HD');
       else if (r >= 720) meta.push('HD \u00b7 for slower connections');
       else if (r > 0) meta.push('Data saver');
-      if (c.width > 0 && c.height > 0) meta.push(c.width + ' \u00d7 ' + c.height);
+      if (sizeFits(c, r)) meta.push(c.width + ' \u00d7 ' + c.height);
       if (c.label === 'ORG' || c.h265) meta.push(c.h265 ? 'HEVC' : 'H.264');
-      if (c.hdr) meta.push('HDR');
+      if (c.hdr && (c.label === 'ORG' || r >= 2160)) meta.push('HDR');
       if (c.label === 'ORG' && c.fps > 0) meta.push(Math.round(c.fps) + ' fps');
       items.push({ type: 'quality', label: c.label, title: displayLabel(c.label), meta: meta.join('  \u00b7  '), current: !!cur && cur.label === c.label });
     });
-    if (s.kind === 'movie' && s.files.length > 1) {
+    if (s.files.length > 1) {
       U.each(s.files, function (f, i) {
         var meta = U.filter([f.file, f.size], function (x) { return !!x; }).join('  \u00b7  ');
         items.push({ type: 'file', index: i, title: f.quality || ('File ' + (i + 1)), meta: meta, current: i === s.fileIndex, section: 'Source file' });
@@ -1693,10 +2237,10 @@ var NativePlayer = (function () {
   /* kind 'quality' | 'subtitles'; items [{type, title, meta, current, section, ...}]. */
   function showSheet(s, kind, items, focus, sub) {
     if (!items.length) return;
-    var subs = kind === 'subtitles';
-    ui.sheet.setAttribute('data-sheet', subs ? 'player-subtitles' : 'player-quality');
-    setText(ui.sheetKicker, subs ? 'Subtitles' : 'Quality');
-    setText(ui.sheetTitle, subs ? 'Choose subtitles' : 'Choose quality');
+    var names = { quality: 'Quality', subtitles: 'Subtitles', audio: 'Audio' };
+    ui.sheet.setAttribute('data-sheet', 'player-' + kind);
+    setText(ui.sheetKicker, names[kind] || '');
+    setText(ui.sheetTitle, kind === 'audio' ? 'Choose audio language' : 'Choose ' + String(names[kind] || '').toLowerCase());
     U.empty(ui.sheetList);
     var labelled = {};
     U.each(items, function (it) {
@@ -1707,9 +2251,10 @@ var NativePlayer = (function () {
       else if (it.type === 'file') row.setAttribute('data-file-index', String(it.index));
       else if (it.type === 'sub-off') row.setAttribute('data-subtitle', 'off');
       else if (it.type === 'sub') { row.setAttribute('data-subtitle', it.li + ':' + it.fi); row.setAttribute('data-subtitle-lang', it.lang); }
+      else if (it.type === 'audio') { row.setAttribute('data-audio', String(it.index)); row.setAttribute('data-audio-lang', it.code || ''); }
       var text = el('div', 'mbp-opt-text', null, row);
       var label = el('div', 'mbp-opt-label', it.title, text);
-      if (it.type === 'sub') label.setAttribute('dir', 'auto');
+      if (it.type === 'sub' || it.type === 'audio') label.setAttribute('dir', 'auto');
       if (it.meta) el('div', 'mbp-opt-meta', it.meta, text);
       row.appendChild(icon('check', 'mbp-opt-check'));
       it.el = row;
@@ -1742,7 +2287,7 @@ var NativePlayer = (function () {
     s.sheet = null;
     flag(ui.root, 'is-sheet', false);
     showOsd(s);
-    setArea(s, 'buttons', kind === 'subtitles' ? 'subtitles' : 'quality');
+    setArea(s, 'buttons', kind === 'subtitles' || kind === 'audio' ? kind : 'quality');
   }
 
   function chooseSheet(s) {
@@ -1751,6 +2296,7 @@ var NativePlayer = (function () {
     closeSheet(s);
     if (it.type === 'sub-off') { if (s.subs.sel || s.subs.loading) subsOff(s, true); else savePref('off'); return; }
     if (it.type === 'sub') { if (!it.current || !s.subs.cues) selectSub(s, it.li, it.fi, 'user'); else savePref(s.subs.sel.name); return; }
+    if (it.type === 'audio') { selectAudio(s, it.index, 'user'); return; }
     if (it.current) return;
     if (it.type === 'quality') switchQuality(s, it.label);
     else switchFile(s, it.index);
@@ -2008,20 +2554,358 @@ var NativePlayer = (function () {
     later(s, 'sub', function () { subTick(s); }, U.clamp((at.next - t) / rate * 1000 + 20, 30, 1000));
   }
 
-  /* The chosen stream first, then the usual order, with streams that already failed in this session last. */
+
+  /* ---------- audio languages (docs/PLAYER.md "Audio languages") ---------- */
+
+  /* Whether a rewritten HLS master (data: URL) plays on this TV: '' not tried yet, 'ok', 'broken' (for this run). */
+  var manifestState = '';
+
+  var LANGS = {
+    en: 'English', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian',
+    pt: 'Portuguese', ru: 'Russian', hi: 'Hindi', ar: 'Arabic', tr: 'Turkish', pl: 'Polish', nl: 'Dutch', sv: 'Swedish',
+    da: 'Danish', fi: 'Finnish', no: 'Norwegian', nb: 'Norwegian', cs: 'Czech', hu: 'Hungarian', el: 'Greek', he: 'Hebrew',
+    th: 'Thai', vi: 'Vietnamese', id: 'Indonesian', ms: 'Malay', ta: 'Tamil', te: 'Telugu', ml: 'Malayalam', kn: 'Kannada',
+    bn: 'Bengali', uk: 'Ukrainian', ro: 'Romanian', fa: 'Persian', ur: 'Urdu', tl: 'Filipino', ca: 'Catalan', hr: 'Croatian',
+    sr: 'Serbian', bg: 'Bulgarian', sk: 'Slovak', sl: 'Slovenian', lt: 'Lithuanian', lv: 'Latvian', et: 'Estonian', is: 'Icelandic'
+  };
+  /* ISO 639-2 codes (Matroska tracks, and the site's NAME="KOR (5.1)" labels) to the 2-letter codes above. */
+  var LANG3 = {
+    eng: 'en', jpn: 'ja', kor: 'ko', chi: 'zh', zho: 'zh', spa: 'es', fre: 'fr', fra: 'fr', ger: 'de', deu: 'de', ita: 'it',
+    por: 'pt', rus: 'ru', hin: 'hi', ara: 'ar', tur: 'tr', pol: 'pl', dut: 'nl', nld: 'nl', swe: 'sv', dan: 'da', fin: 'fi',
+    nor: 'no', nob: 'nb', cze: 'cs', ces: 'cs', hun: 'hu', gre: 'el', ell: 'el', heb: 'he', tha: 'th', vie: 'vi', ind: 'id',
+    may: 'ms', msa: 'ms', tam: 'ta', tel: 'te', mal: 'ml', kan: 'kn', ben: 'bn', ukr: 'uk', rum: 'ro', ron: 'ro', per: 'fa',
+    fas: 'fa', urd: 'ur', fil: 'tl', tgl: 'tl', cat: 'ca', hrv: 'hr', srp: 'sr', bul: 'bg', slo: 'sk', slk: 'sk', slv: 'sl',
+    lit: 'lt', lav: 'lv', est: 'et', ice: 'is', isl: 'is'
+  };
+
+  /* 'en', 'eng', 'en-GB', 'KOR' -> 'en' / 'ko'; unknown ('un', 'und') -> ''. */
+  function langCode(v) {
+    var c = String(v || '').toLowerCase().replace(/_/g, '-').split('-')[0];
+    if (LANG3.hasOwnProperty(c)) return LANG3[c];
+    if (!/^[a-z]{2}$/.test(c) || c === 'un') return '';
+    return c;
+  }
+
+  function langName(code) { return LANGS.hasOwnProperty(code) ? LANGS[code] : code ? code.toUpperCase() : ''; }
+
+  function m3uAttrs(line) {
+    var out = {}, re = /([A-Z0-9\-]+)=("[^"]*"|[^,]*)/g, m;
+    while ((m = re.exec(line))) out[m[1]] = m[2].replace(/^"|"$/g, '');
+    return out;
+  }
+
+  /* Pure: an HLS master playlist -> {group, list: [{code, lang, name, def, channels}], def} for the audio group the
+     first variant uses (the site's masters carry one AAC group with audio=aac, e.g. KOR and ITA). */
+  function audioList(text) {
+    var lines = String(text || '').split(/\r?\n/), groups = {}, group = '', i, a;
+    for (i = 0; i < lines.length; i++) {
+      if (/^#EXT-X-MEDIA:/.test(lines[i])) {
+        a = m3uAttrs(lines[i].slice(13));
+        if (a.TYPE !== 'AUDIO' || !a['GROUP-ID']) continue;
+        (groups[a['GROUP-ID']] = groups[a['GROUP-ID']] || []).push({
+          code: langCode(a.LANGUAGE) || langCode(String(a.NAME || '').split(/[\s(#]/)[0]), lang: a.LANGUAGE || '',
+          name: U.text(a.NAME || '').slice(0, 60), def: a.DEFAULT === 'YES', channels: a.CHANNELS || ''
+        });
+      } else if (!group && /^#EXT-X-STREAM-INF:/.test(lines[i])) group = m3uAttrs(lines[i].slice(18)).AUDIO || '';
+    }
+    var list = group && groups[group] ? groups[group] : [], def = 0;
+    for (i = 0; i < list.length; i++) if (list[i].def) { def = i; break; }
+    return { group: group, list: list, def: def };
+  }
+
+  function absUrl(u, base) {
+    u = String(u || '');
+    if (/^[a-z][a-z0-9+.\-]*:/i.test(u)) return u;
+    var m = /^([a-z]+:)\/\/([^\/?#]*)([^?#]*)/i.exec(String(base || ''));
+    if (!m) return u;
+    if (u.slice(0, 2) === '//') return m[1] + u;
+    if (u.charAt(0) === '/') return m[1] + '//' + m[2] + u;
+    return m[1] + '//' + m[2] + m[3].replace(/[^\/]*$/, '') + u;
+  }
+
+  function setM3uAttr(line, name, value) {
+    var re = new RegExp('([:,])' + name + '=("[^"]*"|[^,]*)');
+    return re.test(line) ? line.replace(re, '$1' + name + '=' + value) : line + ',' + name + '=' + value;
+  }
+
+  /* Pure: the master with only the index-th rendition of the audio group (made the default) and every address
+     absolute, so the TV's player can read it from a data: URL. */
+  function audioMaster(text, base, group, index) {
+    var lines = String(text || '').split(/\r?\n/), out = [], k = -1, i, line, a;
+    for (i = 0; i < lines.length; i++) {
+      line = lines[i];
+      if (/^#EXT-X-MEDIA:/.test(line)) {
+        a = m3uAttrs(line.slice(13));
+        if (a.TYPE === 'AUDIO' && a['GROUP-ID'] === group) {
+          k++;
+          if (k !== index) continue;
+          line = setM3uAttr(setM3uAttr(line, 'DEFAULT', 'YES'), 'AUTOSELECT', 'YES');
+        }
+      }
+      if (line.charAt(0) === '#') line = line.replace(/URI="([^"]*)"/g, function (m0, u) { return 'URI="' + absUrl(u, base) + '"'; });
+      else if (/\S/.test(line)) line = absUrl(line.replace(/^\s+|\s+$/g, ''), base);
+      out.push(line);
+    }
+    return out.join('\n');
+  }
+
+  function dataUrl(text) {
+    try { return 'data:application/vnd.apple.mpegurl;base64,' + window.btoa(unescape(encodeURIComponent(text))); } catch (e) { return ''; }
+  }
+
+  function trackList() {
+    try { var t = ui && ui.video ? ui.video.audioTracks : null; return t && typeof t.length === 'number' ? t : null; } catch (e) { return null; }
+  }
+
+  /* GET text cross-site without credentials (the HLS hosts answer Access-Control-Allow-Origin: *). */
+  function getText(s, url, cb) {
+    var done = false, req = new XMLHttpRequest(), timer = null, h = null;
+    function finish(err, text) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      var i = U.indexOf(s.reqs, h);
+      if (i >= 0) s.reqs.splice(i, 1);
+      U.later(function () { cb(err, text); }, 0, 'player-audio-cb');
+    }
+    h = { abort: function () { if (!done) { done = true; clearTimeout(timer); try { req.abort(); } catch (e) {} } } };
+    s.reqs.push(h);
+    try {
+      req.open('GET', url, true);
+      req.onreadystatechange = function () {
+        if (req.readyState !== 4 || done) return;
+        var t = '';
+        try { t = String(req.responseText || ''); } catch (e0) { t = ''; }
+        if (req.status >= 200 && req.status < 300) finish(t.length > 400000 ? 'too-big' : null, t);
+        else finish(req.status ? 'http-' + req.status : 'network', '');
+      };
+      timer = setTimeout(function () { finish('timeout', ''); try { req.abort(); } catch (e1) {} }, CFG.audioTimeout);
+      req.send(null);
+    } catch (e2) { finish('exception', ''); }
+  }
+
+  /* The HLS master of the stream that plays, read once it plays (never before: the start must not wait for it). */
+  function audioFetch(s, c) {
+    var a = s.audio;
+    if (!c || !c.hls || c.synthetic || /^data:/i.test(c.src) || (a.master && a.master.src === c.src) || a.fetching === c.src || a.unread === c.src) return;
+    a.fetching = c.src;
+    getText(s, c.src, function (err, text) {
+      if (s !== S || s.finished) return;
+      if (a.fetching === c.src) a.fetching = '';
+      if (err || !/^\s*#EXTM3U/.test(text)) { a.unread = c.src; Log.info('player', 'audio: master not read (' + (err || 'not a playlist') + ')'); return; }
+      var info = audioList(text), tl = trackList();
+      a.master = { src: c.src, text: text, group: info.group, list: info.list, def: info.def };
+      Log.info('player', 'audio: ' + c.label + ' lists ' + info.list.length + (info.list.length ? ' [' + U.map(info.list, function (x, i) {
+        return (x.code || x.lang || '?') + (i === info.def ? '*' : '');
+      }).join(', ') + ']' : '') + '; video.audioTracks ' + (tl ? tl.length : 'missing') + (manifestState ? '; data: master ' + manifestState : ''));
+      audioRefresh(s);
+    });
+  }
+
+  /* The choices for the stream that plays: {method: 'tracks' | 'manifest', items: [{index, code, title, meta, current}]}
+     or null. 'tracks' (the platform lists the tracks in video.audioTracks) is preferred; 'manifest' needs the HLS master
+     and a TV that plays a rewritten master (manifestState not 'broken'). */
+  /* hls.js's audio tracks (its current audio group) as raw choices. */
+  function hlsAudioRaw(h) {
+    var t = hlsAudioTracks(h), cur = hlsAudioIndex(h), out = [], i;
+    for (i = 0; i < t.length && i < 16; i++) {
+      var x = t[i] || {};
+      out.push({ index: i, code: langCode(x.lang) || langCode(String(x.name || '').split(/[\s(#]/)[0]), name: U.text(x.name || '').slice(0, 60), current: i === cur });
+    }
+    if (out.length && cur < 0) out[0].current = true;
+    return out;
+  }
+
+  function audioOptions(s) {
+    var c = s.cands[s.ci], a = s.audio, tl = trackList(), raw = [], method = '', i;
+    if (!c || !s.ready) return null;
+    var h = hlsOf(s);
+    if (h) return audioPost('hlsjs', hlsAudioRaw(h));
+    var src = c.synthetic ? c.orig.src : c.src, m = a.master && a.master.src === src ? a.master : null;
+    if (tl && tl.length > 1) {
+      method = 'tracks';
+      var any = false;
+      for (i = 0; i < tl.length && i < 16; i++) {
+        var t = tl[i], e = m && m.list.length === tl.length ? m.list[i] : null;
+        if (t && t.enabled) any = true;
+        raw.push({ index: i, code: langCode(t && t.language) || (e ? e.code : ''), name: U.text(t && t.label || '') || (e ? e.name : ''), current: !!(t && t.enabled) });
+      }
+      if (!any && raw.length) raw[0].current = true;
+    } else if (m && m.list.length > 1 && c.hls && manifestState !== 'broken') {
+      method = 'manifest';
+      var cur = c.synthetic ? c.audioIndex : m.def;
+      for (i = 0; i < m.list.length && i < 16; i++) raw.push({ index: i, code: m.list[i].code, name: m.list[i].name, current: i === cur });
+    } else return null;
+    return audioPost(method, raw);
+  }
+
+  /* Titles ('Japanese', 'English · 2') and second lines for raw choices; null when there is no real choice. */
+  function audioPost(method, raw) {
+    if (raw.length < 2) return null;
+    var count = {}, seen = {}, codes = 0;
+    U.each(raw, function (r) {
+      r.title = langName(r.code) || r.name || 'Track ' + (r.index + 1);
+      count[r.title] = (count[r.title] || 0) + 1;
+      if (!seen[r.code || r.title]) { seen[r.code || r.title] = true; codes++; }
+    });
+    /* One language twice over HLS (a stereo and a 5.1 mix, a commentary) is not worth a switch: only real choices. */
+    if ((method === 'manifest' || method === 'hlsjs') && codes < 2) return null;
+    var n = {};
+    U.each(raw, function (r) {
+      if (count[r.title] > 1) { n[r.title] = (n[r.title] || 0) + 1; if (n[r.title] > 1) r.title += ' · ' + n[r.title]; }
+      r.meta = r.name && r.name.toLowerCase() !== r.title.toLowerCase() ? r.name : '';
+    });
+    return { method: method, items: raw };
+  }
+
+  function audioCurrent(o) { var c = o ? U.find(o.items, function (x) { return x.current; }) : null; return c ? c.title : ''; }
+
+  function prefAudio() {
+    var v = '';
+    try { v = typeof Prefs !== 'undefined' ? Prefs.get('audioLang') : ''; } catch (e) { v = ''; }
+    return typeof v === 'string' ? U.text(v).toLowerCase() : '';
+  }
+
+  function saveAudioPref(it) {
+    try { if (typeof Prefs !== 'undefined') Prefs.set('audioLang', it.code || it.title); } catch (e) {}
+  }
+
+  function audioMatch(o, want) {
+    var i;
+    for (i = 0; i < o.items.length; i++) if (o.items[i].code && o.items[i].code === want) return i;
+    for (i = 0; i < o.items.length; i++) if (o.items[i].title.toLowerCase() === want) return i;
+    return -1;
+  }
+
+  /* After metadata, a track-list change, a master read or a start: refresh the Audio button and, once per stream,
+     switch to the remembered language (Prefs audioLang) when this title has it. */
+  function audioRefresh(s) {
+    if (!ui || s !== S || s.finished) return;
+    s.btnSig = '';
+    var c = s.cands[s.ci], a = s.audio;
+    if (c && c.hls && !c.synthetic && s.playedTry === s.tryId && !hlsOf(s)) audioFetch(s, c);
+    var want = prefAudio();
+    if (want && a.prefTry !== s.tryId && !a.pending && s.playedTry === s.tryId) {
+      var o = audioOptions(s), at = o ? audioMatch(o, want) : -1;
+      /* Wait for the master's names when the platform's tracks carry no language yet. */
+      if (o && (at >= 0 || a.master || !(c && c.hls) || !a.fetching)) {
+        a.prefTry = s.tryId;
+        if (at >= 0 && !o.items[at].current) {
+          Log.info('player', 'audio: the remembered language (' + want + ')');
+          selectAudio(s, at, 'auto');
+        }
+      }
+    }
+    if (s.state === 'playing') render(s);
+  }
+
+  /* how: 'user' (the sheet; remembered) or 'auto' (the remembered language). */
+  function selectAudio(s, index, how) {
+    var o = audioOptions(s), it = o && o.items[index];
+    if (!it) return;
+    if (how === 'user') saveAudioPref(it);
+    if (it.current) { if (how === 'user') showChip(s, 'Audio: ' + it.title, 2500, false); return; }
+    if (o.method === 'hlsjs') {
+      var h = hlsOf(s);
+      Log.info('player', 'audio: track ' + (it.index + 1) + ' of ' + o.items.length + ' (' + (it.code || '?') + ') via hls.js');
+      h.audioWant = { index: it.index, title: it.title, how: how };
+      try { h.hls.audioTrack = it.index; } catch (e0) { Log.warn('player', 'audio: ' + clean(e0)); }
+      if (how === 'user') showChip(s, 'Switching audio to ' + it.title + '\u2026', CFG.audioSwitchTimeout, false);
+      s.btnSig = '';
+      render(s);
+      later(s, 'audioverify', function () {
+        if (hlsCur !== h || !h.audioWant || h.audioWant.index !== it.index) return;
+        h.audioWant = null;
+        Log.warn('player', 'audio: hls.js did not switch the track');
+        showChip(s, 'The audio didn\u2019t switch', 3000, false);
+        s.btnSig = '';
+        render(s);
+      }, CFG.audioSwitchTimeout);
+      return;
+    }
+    if (o.method === 'tracks') {
+      var tl = trackList(), j;
+      Log.info('player', 'audio: track ' + (index + 1) + ' of ' + tl.length + ' (' + (it.code || '?') + ') via audioTracks');
+      try {
+        tl[index].enabled = true;
+        for (j = 0; j < tl.length; j++) if (j !== index && tl[j].enabled) tl[j].enabled = false;
+      } catch (e) { Log.warn('player', 'audio: ' + clean(e)); }
+      s.btnSig = '';
+      render(s);
+      later(s, 'audioverify', function () {
+        var now = trackList(), ok = !!(now && now[index] && now[index].enabled);
+        if (ok) Log.info('player', 'audio: switched'); else Log.warn('player', 'audio: the TV did not switch the track');
+        if (how === 'user' || !ok) showChip(s, ok ? 'Audio: ' + it.title : 'The TV didn’t switch the audio', 3000, false);
+        s.btnSig = '';
+        render(s);
+      }, CFG.audioVerify);
+      return;
+    }
+    /* 'manifest': the same stream from a master that offers only the chosen rendition, at the same position; if the
+       TV cannot play it, the stream that was playing takes over again (switchOutcome -> audioOutcome). */
+    var c = s.cands[s.ci], base = c.synthetic ? c.orig : c, m = s.audio.master, cand = base;
+    if (index !== m.def) {
+      var url = dataUrl(audioMaster(m.text, m.src, m.group, index));
+      if (!url) return;
+      cand = { label: base.label, src: url, hls: true, h265: base.h265, hdr: base.hdr, width: base.width, height: base.height,
+        fps: base.fps, kind: 'hls', synthetic: true, orig: base, audioIndex: index };
+    }
+    var rest = U.filter(s.cands, function (x) { return x !== c && x !== base && !x.synthetic; });
+    var at = pos(s);
+    report(s, 'switch');
+    Log.info('player', 'audio: ' + (it.code || '?') + ' via a rewritten master at ' + Math.round(at));
+    s.audio.pending = { index: index, title: it.title, how: how, synthetic: cand !== base };
+    s.cands = [cand].concat(cand !== base ? [base] : [], rest);
+    s.switchNote = '';
+    s.resumePending = false;
+    if (how === 'user') showChip(s, 'Switching audio to ' + it.title + '…', 8000, false);
+    startCandidate(s, 0, at, 'audio');
+  }
+
+  function audioOutcome(s, c, au) {
+    s.audio.pending = null;
+    if (!au.synthetic) { if (au.how === 'user') s.switchNote = 'Audio: ' + au.title; return; }
+    if (c && c.synthetic) {
+      if (manifestState !== 'ok') Log.info('player', 'audio: a rewritten master plays on this TV');
+      manifestState = 'ok';
+      s.switchNote = 'Audio: ' + au.title;
+    } else {
+      Log.warn('player', 'audio: a rewritten master does not play on this TV');
+      manifestState = 'broken';
+      s.switchNote = 'This TV can’t switch the audio language';
+    }
+  }
+
+  function openAudioSheet(s) {
+    var o = audioOptions(s), items = [], focus = 0;
+    if (!o) { showChip(s, 'No other audio languages for this title', 2500, false); return; }
+    U.each(o.items, function (it, i) {
+      if (it.current) focus = i;
+      items.push({ type: 'audio', index: it.index, code: it.code, title: it.title, meta: it.meta, current: it.current });
+    });
+    showSheet(s, 'audio', items, focus, 'Now: ' + audioCurrent(o) + '  ·  ' + o.items.length + ' tracks');
+  }
+
+  /* The chosen stream first; if it does not play, back to the stream that was playing (at the same position), then
+     the usual order with streams that already failed in this session last. The chip says what actually plays. */
   function switchQuality(s, label) {
-    var chosen = null, fresh = [], stale = [];
+    var chosen = null, cur = s.cands[s.ci], back = null, fresh = [], stale = [];
     U.each(s.base, function (c) {
       if (!chosen && c.label === label) chosen = c;
+      else if (!back && cur && c.label === cur.label) back = c;
       else if (s.failed[c.label]) stale.push(c);
       else fresh.push(c);
     });
     if (!chosen) return;
     var at = pos(s);
+    if (s.seek) at = s.seek.target;
+    s.seek = null; s.seekKey = null; cancel(s, 'seek');
+    if (ui) flag(ui.root, 'is-seeking', false);
     report(s, 'switch');
-    Log.info('player', 'quality ' + label + ' at ' + Math.round(at));
-    s.cands = [chosen].concat(fresh, stale);
-    s.switchNote = 'Quality: ' + displayLabel(label);
+    Log.info('player', 'quality ' + label + ' at ' + Math.round(at) + (back ? ' (from ' + back.label + ')' : ''));
+    s.cands = [chosen].concat(back ? [back] : [], fresh, stale);
+    s.switching = { label: label };
+    s.switchNote = '';
     s.resumePending = false;
     startCandidate(s, 0, at, 'quality');
   }
@@ -2224,6 +3108,19 @@ var NativePlayer = (function () {
 
   /* ---------- error card ---------- */
 
+  function triedFiles(s) {
+    var list = s.req.triedFiles && s.req.triedFiles.slice ? s.req.triedFiles.slice() : [];
+    if (U.indexOf(list, s.fileIndex) < 0) list.push(s.fileIndex);
+    return list;
+  }
+
+  /* The next file of this title not tried yet in this chain of attempts, or -1. */
+  function otherFile(s) {
+    var n = s.files.length, tried = triedFiles(s), i;
+    for (i = 1; i < n; i++) { var k = (s.fileIndex + i) % n; if (U.indexOf(tried, k) < 0) return k; }
+    return -1;
+  }
+
   function showError(s, reason, message, code) {
     if (!ui || s !== S) return;
     Log.warn('player', 'error card: ' + reason);
@@ -2252,6 +3149,8 @@ var NativePlayer = (function () {
     setText(ui.errCode, code || '');
     flag(ui.errCode, 'is-empty', !code);
     var btns = [], retry = reason === 'network' || reason === 'bad-answer' || reason === 'internal' || reason === 'streams-failed';
+    var other = reason === 'streams-failed' && !s.started ? otherFile(s) : -1;
+    if (other >= 0) btns.push({ action: 'other-file', icon: 'quality', label: 'Try another file' });
     if (retry) btns.push({ action: 'retry', icon: 'reload', label: 'Try again' });
     if (reason !== 'bad-request') btns.push({ action: 'website', icon: 'globe', label: 'Try website player' });
     btns.push({ action: 'back', icon: 'back', label: 'Back' });
@@ -2264,8 +3163,10 @@ var NativePlayer = (function () {
       el('span', 'mbp-btn-label', b.label, n);
       b.el = n;
     });
-    /* Mid-film (it played before) Try again is the likely fix; otherwise the website's player. */
-    var focus = 0, want = s.started && retry ? 'retry' : 'website';
+    /* Mid-film (it played before) Try again is the likely fix; streams that timed out: Try again; another file of
+       the title when there is one; otherwise the website's player (the last resort). */
+    var slow = s.fails.length > 0 && !U.find(s.fails, function (f) { return !/^(?:timeout|stall|media-2|hls-network)$/.test(f.reason); });
+    var focus = 0, want = s.started && retry ? 'retry' : other >= 0 ? 'other-file' : slow && retry ? 'retry' : 'website';
     U.each(btns, function (b, i) { if (b.action === want) focus = i; });
     s.err = { reason: reason, btns: btns, index: focus };
     renderError(s);
@@ -2284,7 +3185,16 @@ var NativePlayer = (function () {
     var b = e.btns[e.index];
     if (b.action === 'back') stop('back');
     else if (b.action === 'website') fallback(s, e.reason);
-    else if (b.action === 'retry') {
+    else if (b.action === 'other-file') {
+      var next = otherFile(s), copy = {}, k;
+      for (k in s.req) if (s.req.hasOwnProperty(k)) copy[k] = s.req[k];
+      copy.fileIndex = next;
+      copy.triedFiles = triedFiles(s).concat([next]);
+      var hooks2 = s.hooks;
+      Log.info('player', 'trying file ' + next + ' of ' + s.files.length);
+      finish(s, {});
+      begin(copy, hooks2, '');
+    } else if (b.action === 'retry') {
       /* A fresh start (new file list, new stream links) that continues where the video stopped. */
       var req = s.req, hooks = s.hooks, at = s.errAt;
       finish(s, {});
@@ -2428,7 +3338,9 @@ var NativePlayer = (function () {
   function configure(opts) {
     if (opts) for (var k in opts) if (opts.hasOwnProperty(k) && CFG.hasOwnProperty(k) && typeof opts[k] === 'number' && opts[k] >= 0) CFG[k] = opts[k];
     if (opts && typeof opts.tvOrder === 'string') tvOrder = opts.tvOrder;
-    var out = { tvOrder: tvOrder };
+    if (opts && /^(?:auto|hlsjs|native)$/.test(String(opts.hlsEngine || ''))) hlsMode = opts.hlsEngine;
+    if (opts && typeof opts.hlsCdn === 'string' && (opts.hlsCdn === '' || /^https?:\/\//i.test(opts.hlsCdn))) hlsCdn = opts.hlsCdn;
+    var out = { tvOrder: tvOrder, hlsEngine: hlsMode, hlsCdn: hlsCdn, hls: { state: lib.state, version: lib.version, from: lib.from, verdict: verdict() } };
     for (var c in CFG) if (CFG.hasOwnProperty(c)) out[c] = CFG[c];
     return out;
   }
@@ -2454,6 +3366,8 @@ var NativePlayer = (function () {
     _order: guarded('order', order, []),
     _cues: guarded('cues', parseCues, []),
     _decodeSub: guarded('decode-sub', decodeSub, ''),
-    _cuesAt: guarded('cues-at', cuesAt, null)
+    _cuesAt: guarded('cues-at', cuesAt, null),
+    _audioList: guarded('audio-list', audioList, null),
+    _audioMaster: guarded('audio-master', audioMaster, '')
   };
 }());

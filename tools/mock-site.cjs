@@ -134,6 +134,8 @@ function pageFor(pathname, query, cookies) {
   if (pathname === '/' || pathname === '/index' || pathname === '/index/index') return { html: read(cookies.mockhome === 'mobile' ? 'home-mobile.html' : 'home.html') };
   if (pathname === '/index/search') {
     const word = query.word || '';
+    // mocksearch=mobile: the mobile search layout TV user agents are served (test/fixtures/search-mobile.html).
+    if (cookies.mocksearch === 'mobile' && word.trim()) return { html: read('search-mobile.html').replace(/value="batman"/, 'value="' + escapeHtml(word) + '"') };
     if (!word.trim() || /zzq|noresult/i.test(word)) return { html: read('search-empty.html').replace(/zzqxjvnotatitle/g, escapeHtml(word)) };
     let html = read('search.html').replace(/batman/g, escapeHtml(word).replace(/&/g, '&amp;'));
     if (query.type === 'movie') html = html.replace(/<a href="\/tvshow\/[\s\S]*?<\/a>\s*/g, '');
@@ -144,7 +146,15 @@ function pageFor(pathname, query, cookies) {
   if ((m = pathname.match(/^\/movie\/(\d+)$/))) return { html: read('movie.html').replace(/40102/g, m[1]) };
   if ((m = pathname.match(/^\/tvshow\/(\d+)$/))) return { html: read('tvshow.html').replace(/556/g, m[1]) };
   if ((m = pathname.match(/^\/index\/index\/(tv)?detail$/))) return { redirect: (m[1] ? '/tvshow/' : '/movie/') + (query.id || '1') };
-  if (pathname === '/movie' || pathname === '/tvshow' || /^\/index\/(movie|tv)\/top_list$/.test(pathname)) return { html: paginate(read('movies.html'), page, 3) };
+  if (pathname === '/movie' || pathname === '/tvshow') return { html: filteredList(pathname, query, cookies, page) };
+  if (/^\/index\/(movie|tv)\/top_list$/.test(pathname)) return { html: paginate(read('movies.html'), page, 3) };
+  // A person's titles (Filters.personParams): actor 999 has no movies, only TV shows.
+  if (pathname === '/index/index/actor_works') {
+    let html = read('actor-works.html');
+    if (query.type === 'tv') html = html.replace(/\/movie\/(\d+)/g, '/tvshow/$1').replace(/TEST_movie_/g, 'TEST_tv_').replace(/Movies of/, 'TV Shows of');
+    else if (query.id === '999') html = html.replace(/<div class="works_list">[\s\S]*?<\/div>/, '<div class="works_list"></div>');
+    return { html };
+  }
   if (pathname === '/index/index/movie_list') return { html: paginate(read('list.html'), page, 3) };
   if (pathname === '/index/index/my_box' || /^\/index\/index\/(fav_list|recommend_list|watching_list)$/.test(pathname)) return { html: read('library.html') };
   // Watch history links use the legacy detail URLs (section 3); built from the list fixture's cards.
@@ -154,6 +164,27 @@ function pageFor(pathname, query, cookies) {
   }
   if (pathname.startsWith('/index/login')) return { html: '<!doctype html><title>Login - MovieBoxPro</title><body style="background:#000;color:#fff"><h1>Mock login page</h1><a href="/__mock/signin">Finish sign in</a></body>' };
   return null;
+}
+
+// The filter parameters of /movie and /tvshow (the site's own filter panel; Site.url.browse).
+const FILTER_KEYS = ['sort', 'genr', 'year', 'tomato_meter', 'quality', 'rating', 'country'];
+// Movies / TV Shows. mocklist=mobile serves the mobile layout (test/fixtures/movies-mobile.html, which carries the
+// site's filter panel); the default layout gets the same panel added. A filtered request answers different titles
+// (ids derived from the filter values, ratings kept) and its next link keeps the filters, like the real site.
+function filteredList(pathname, query, cookies, page) {
+  const mobile = read('movies-mobile.html');
+  let html = cookies.mocklist === 'mobile' ? mobile : read('movies.html');
+  if (html.indexOf('screenbg-filter') < 0) {
+    const panel = mobile.slice(mobile.indexOf('<div class="screenbg screenbg-filter"'), mobile.lastIndexOf('</div>\n</body>'));
+    html = html.replace(/<\/body>/i, panel + '</body>');
+  }
+  const params = FILTER_KEYS.filter(k => query[k]).map(k => k + '=' + encodeURIComponent(query[k]));
+  if (params.length) {
+    const salt = String(100 + hashOf(params.join('&')) % 900);
+    html = html.replace(/\/(movie|tvshow)\/(\d+)/g, (m, k, id) => `/${k}/${salt}${id}`).replace(/TEST_(movie|tv)_(\d+)/g, (m, k, id) => `TEST_${k}_${salt}${id}`);
+  }
+  html = html.replace(/href="\/movie\?page=(\d+)"/g, (m, n) => `href="${pathname}?${params.concat(['page=' + n]).join('&amp;')}"`);
+  return paginate(html, page, 3);
 }
 
 // Makes page N distinct: title ids get a suffix and the "next" link advances until maxPage.
@@ -210,6 +241,23 @@ function start(opts = {}) {
         return send(200, 'application/json', JSON.stringify(q ? all.filter(x => x.name.toLowerCase().indexOf(q.slice(0, 2)) >= 0).slice(0, +(query.limit || 12)) : []));
       }
       if (u.pathname === '/index/api/search_hot') return send(200, 'application/json', read('search_hot.json'));
+      // The website's actor search (POST key, page, type=actor, ajax=1; Api.people): 10 people on page 1, 3 on page 2.
+      if (u.pathname === '/index/search/search' && req.method === 'POST') {
+        let body = '';
+        req.on('data', c => { body += c; });
+        req.on('end', () => {
+          if (cookies.mockgate === '1') return send(200, 'text/html; charset=utf-8', read('gate.html'));
+          const f = {};
+          body.split('&').forEach(p => { const i = p.indexOf('='); if (i > 0) f[decodeURIComponent(p.slice(0, i))] = decodeURIComponent(p.slice(i + 1).replace(/\+/g, ' ')); });
+          const pg = parseInt(f.page || '1', 10) || 1;
+          const data = JSON.parse(read('search_actor.json'));
+          let list = data.data.list;
+          if (/zzq|noresult/i.test(f.key || '') || pg > 2) list = '';
+          else if (pg === 2) list = list.split('</a>').slice(0, 3).join('</a>').replace(/\/actor\/(\d+)/g, '/actor/2$1') + '</a>';
+          send(200, 'application/json', JSON.stringify({ code: 1, msg: 'success', data: { list: localizeImages(list) } }));
+        });
+        return;
+      }
       const page = (typeof opts.pageFor === 'function' && opts.pageFor(u.pathname, query, cookies)) || pageFor(u.pathname, query, cookies);
       if (!page) return send(404, 'text/html', '<!doctype html><title>Not found</title><body>Not found</body>');
       if (page.redirect) return send(302, 'text/plain', '', { Location: page.redirect });

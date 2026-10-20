@@ -12,6 +12,12 @@
 //   GET  /__media/ep.wav?len=S               a silent WAV of S seconds (Range supported, so <video> can seek)
 //   GET  /__media/bad*.m3u8                  404 (a failing HLS stream)
 //   GET  /__media/hang.m3u8                  never answers (candidate timeout)
+//   GET  /__media/mse.m3u8?len=S&q=Q         an HLS stream only hls.js plays: the <video> element gets 404 (the platform
+//                                            player refuses it, media error 4); a script (the hls.js stand-in) gets a master
+//                                            (AUTO: 4K HEVC first, then 1080p/720p/360p H.264; a fixed q: that rendition;
+//                                            English + Korean audio) whose #MOCK-MEDIA line names the WAV to play
+//   GET  /static/videojs/hls.min.js          the site's own hls.js copy: tools/mock-hls.js (a stand-in with the hls.js API)
+//   GET  /__cdn/hls.min.js                   the same stand-in as the "CDN copy" (tests configure hlsCdn to it)
 //   GET  /__player/blank                     an empty page with a #mbptv root, for player tests and screenshots
 //   GET  /__subs/<file>                      subtitle files: en.srt, en2.vtt, ar-1256.srt (windows-1256 bytes);
 //                                            proxy-only.srt and missing.srt answer 404
@@ -21,10 +27,13 @@
 // mbp_skips=START,END (intro end / credits start; -1 = unknown), mbp_next=0 (no next episode),
 // mbp_auto=bad|ok|hang (AUTO HLS; default bad), mbp_org=ok|bad|hang (ORG MP4; default ok), mbp_all=bad (every
 // stream fails), mbp_delay=MS (delay the player answer), mbp_tvfile=fail (tv_file answers code 0),
-// mbp_mid=ID (movie id in the progress payload, default 40102), mbp_eps=N (episodes per season, default 10),
+// mbp_org=slow (the ORG file's header trickles in over about 5 s), mbp_bad=LABELS (these fixed HLS labels fail, e.g. 720p,360p), mbp_master=1 (scripts reading a stream get an HLS
+// master with English and Korean audio), mbp_mid=ID (movie id in the progress payload, default 40102), mbp_eps=N (episodes per season, default 10),
 // mbp_seasons=N (seasons, default 3: the last episode of a season is followed by E1 of the next one),
 // mbp_subs=1|KEYS (the player data carries the website's subtitle panel: every language, or a comma list of
-// English,Arabic,Spanish,French), mockgate=1 (signed out).
+// English,Arabic,Spanish,French), mockgate=1 (signed out), mbp_hls=mse (every HLS label, AUTO included, is an
+// hls.js-only stream; mbp_auto=mse does it for AUTO alone), mbp_langs=1 (the mse masters list English only),
+// mbp_hlslib=nosite,nocdn,hang (the site copy of hls.js 404s / the CDN copy 404s / the site copy never answers).
 // Special ids: mfid=999 / tfid=999 answer {"code":-1,"msg":"VIP only"}.
 'use strict';
 const fs = require('fs');
@@ -93,6 +102,34 @@ function serveBuffer(req, res, buf, type) {
   return req.method === 'HEAD' ? res.end() : res.end(buf);
 }
 
+// The site's HLS master with audio=aac (live capture 2026-10-20, Squid Game S1E1, tokens replaced): fMP4 renditions
+// and separate AAC audio renditions per language.
+const MASTER = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS',
+  '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio_aac",LANGUAGE="en",NAME="ENG",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="2",URI="/m3u8_proxy/audio/1/audio_1.m3u8?KEY2=R&sign=REDACTED"',
+  '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio_aac",LANGUAGE="ko",NAME="KOR",DEFAULT=NO,AUTOSELECT=YES,CHANNELS="2",URI="/m3u8_proxy/audio/1/audio_2.m3u8?KEY2=R&sign=REDACTED"',
+  '#EXT-X-STREAM-INF:BANDWIDTH=3218000,RESOLUTION=1920x1080,CODECS="avc1.4d4028,mp4a.40.2",AUDIO="audio_aac",FRAME-RATE=24.000,VIDEO-RANGE=SDR',
+  '/m3u8_proxy/video/1/video_1080p.m3u8?KEY2=R&sign=REDACTED',
+  '#EXT-X-STREAM-INF:BANDWIDTH=1711000,RESOLUTION=1280x720,CODECS="avc1.4d401f,mp4a.40.2",AUDIO="audio_aac",FRAME-RATE=24.000,VIDEO-RANGE=SDR',
+  'video_720p.m3u8?KEY2=R&sign=REDACTED', ''].join('\n');
+
+// An hls.js-only master (see /__media/mse.m3u8): renditions for q ('auto' = all, 4K HEVC first like the site's), audio
+// renditions, and the WAV the hls.js stand-in plays.
+function mseMaster(query, cookies) {
+  const q = String(query.q || 'auto'), media = `/__media/ep.wav?len=${intIn(query.len, 60, 1, 1800)}&q=${q}&tok=${query.tok || 0}`;
+  const lines = ['#EXTM3U', '#EXT-X-VERSION:7', '#EXT-X-INDEPENDENT-SEGMENTS',
+    '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio_aac",LANGUAGE="en",NAME="ENG",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="2",URI="audio_1.m3u8"'];
+  if (cookies.mbp_langs !== '1') lines.push('#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio_aac",LANGUAGE="ko",NAME="KOR (5.1)",DEFAULT=NO,AUTOSELECT=YES,CHANNELS="2",URI="audio_2.m3u8"');
+  const all = {
+    '4k': ['#EXT-X-STREAM-INF:BANDWIDTH=9100000,RESOLUTION=3840x2160,CODECS="hvc1.2.4.L150.90,mp4a.40.2",AUDIO="audio_aac",VIDEO-RANGE=PQ', 'video_4k.m3u8'],
+    '1080p': ['#EXT-X-STREAM-INF:BANDWIDTH=3218000,RESOLUTION=1920x1080,CODECS="avc1.4d4028,mp4a.40.2",AUDIO="audio_aac"', 'video_1080p.m3u8'],
+    '720p': ['#EXT-X-STREAM-INF:BANDWIDTH=1711000,RESOLUTION=1280x720,CODECS="avc1.4d401f,mp4a.40.2",AUDIO="audio_aac"', 'video_720p.m3u8'],
+    '360p': ['#EXT-X-STREAM-INF:BANDWIDTH=660000,RESOLUTION=640x360,CODECS="avc1.4d401e,mp4a.40.2",AUDIO="audio_aac"', 'video_360p.m3u8']
+  };
+  (q === 'auto' ? Object.keys(all) : [all[q] ? q : '1080p']).forEach(k => lines.push(all[k][0], all[k][1]));
+  lines.push('#MOCK-MEDIA:' + media, '');
+  return lines.join('\n');
+}
+
 // ---------- player data ----------
 
 function skipsJson(cookie) {
@@ -111,11 +148,14 @@ function sourcesFor(host, query, cookies) {
   const good = q => `${origin}/__media/ep.wav?len=${len}&q=${q}&sign=REDACTED&t=1700000000&tok=${tok}`;
   const bad = q => `${origin}/__media/bad-${q}.${q === 'org' ? 'mp4' : 'm3u8'}?sign=REDACTED&t=1700000000&client=mbp`;
   const hang = `${origin}/__media/hang.m3u8?sign=REDACTED`;
-  const pick = (mode, q) => cookies.mbp_all === 'bad' ? bad(q) : mode === 'ok' ? good(q) : mode === 'hang' ? hang : bad(q);
-  const autoMode = cookies.mbp_auto || 'bad', orgMode = cookies.mbp_org || 'ok';
+  const mse = q => `${origin}/__media/mse.m3u8?len=${len}&q=${q}&sign=REDACTED&t=1700000000&tok=${tok}`;
+  const slow = q => `${origin}/__media/slow.wav?len=${len}&q=${q}&sign=REDACTED&tok=${tok}`;
+  const pick = (mode, q) => cookies.mbp_all === 'bad' ? bad(q) : mode === 'ok' ? good(q) : mode === 'mse' ? mse(q) : mode === 'slow' ? slow(q) : mode === 'hang' ? hang : bad(q);
+  const allMse = cookies.mbp_hls === 'mse', autoMode = cookies.mbp_auto || (allMse ? 'mse' : 'bad'), orgMode = cookies.mbp_org || 'ok';
   const org = { type: 'video/mp4', file: pick(orgMode, 'org'), label: 'ORG', mp4_id: 886357, h265: hevc ? 1 : 0,
     width: hevc ? 3840 : 1920, height: hevc ? 2160 : 1080, bitstream: 8484, size: 2, hdr: hevc ? 1 : 0, fps: hevc ? 24 : 25 };
-  const hls = (label, q, w, h) => ({ type: 'application/x-mpegURL', file: pick(label === 'AUTO' ? autoMode : 'ok', q), label, mp4_id: 2353127, h265: 0,
+  const badLabels = String(cookies.mbp_bad || '').split(',');
+  const hls = (label, q, w, h) => ({ type: 'application/x-mpegURL', file: pick(label === 'AUTO' ? autoMode : badLabels.includes(label) ? 'bad' : allMse ? 'mse' : 'ok', q), label, mp4_id: 2353127, h265: 0,
     width: w, height: h, bitstream: w ? 8484 : 0, size: w ? 2 : 0, hdr: 0, fps: w ? 25 : 0 });
   return [org, hls('AUTO', 'auto', 0, 0), hls('1080p', '1080p', 1920, 1080), hls('720p', '720p', 0, 0), hls('360p', '360p', 0, 0)];
 }
@@ -237,6 +277,15 @@ function handle(u, query, cookies, req, res, send, helpers) {
     return true;
   }
 
+  if (p === '/static/videojs/hls.min.js' || p === '/__cdn/hls.min.js') {
+    const site = p.charAt(1) === 's', lib = String(cookies.mbp_hlslib || '').split(',');
+    remember(playerLog, { t: Date.now(), kind: 'hlslib', path: p });
+    if (site && lib.includes('hang')) { const timer = setTimeout(() => { try { res.destroy(); } catch (e) {} }, 30000); req.on('close', () => clearTimeout(timer)); return true; }
+    if (lib.includes(site ? 'nosite' : 'nocdn')) { send(404, 'text/plain', 'not found'); return true; }
+    send(200, 'application/javascript; charset=utf-8', `window.__hlsMockFrom = '${site ? 'site' : 'cdn'}';\n` + fs.readFileSync(path.join(__dirname, 'mock-hls.js'), 'utf8'));
+    return true;
+  }
+
   if (p.startsWith('/__subs/')) {
     remember(playerLog, { t: Date.now(), kind: 'subs', path: p, proxy: false });
     const name = p.slice('/__subs/'.length);
@@ -254,7 +303,35 @@ function handle(u, query, cookies, req, res, send, helpers) {
   if (p.startsWith('/__media/')) {
     remember(playerLog, { t: Date.now(), kind: 'media', path: p, query });
     if (query.tok && +query.tok <= expiredUpTo) { send(403, 'text/plain', 'expired'); return true; }
+    // mbp_master=1: a script's GET of a stream (fetch/XHR, Sec-Fetch-Dest: empty) reads an HLS master with two audio
+    // languages, like the site's (the <video> element still gets the WAV).
+    if (p === '/__media/ep.wav' && cookies.mbp_master === '1' && req.headers['sec-fetch-dest'] === 'empty') {
+      remember(playerLog, { t: Date.now(), kind: 'master', path: p, query, credentials: !!req.headers.cookie });
+      res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
+      res.end(MASTER);
+      return true;
+    }
     if (p === '/__media/ep.wav') { serveBuffer(req, res, wav(query.len), 'audio/wav'); return true; }
+    if (p === '/__media/slow.wav') {
+      // A large original that is slow to give up its header: the 44 header bytes trickle in over about 5 s (data keeps
+      // arriving, metadata comes late), then the rest at once.
+      const buf = wav(query.len);
+      let i = 0, timer = null;
+      res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': buf.length, 'Cache-Control': 'no-store' });
+      const step = () => {
+        if (i < 44) { res.write(buf.subarray(i, i + 1)); i++; timer = setTimeout(step, 120); return; }
+        res.end(buf.subarray(44));
+      };
+      req.on('close', () => clearTimeout(timer));
+      step();
+      return true;
+    }
+    if (p === '/__media/mse.m3u8') {
+      if (req.headers['sec-fetch-dest'] !== 'empty') { send(404, 'text/plain', 'not for the platform player'); return true; }
+      res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl', 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
+      res.end(mseMaster(query, cookies));
+      return true;
+    }
     if (p === '/__media/hang.m3u8') { const timer = setTimeout(() => { try { res.destroy(); } catch (e) {} }, 30000); req.on('close', () => clearTimeout(timer)); return true; }
     send(404, 'text/plain', 'not found');
     return true;

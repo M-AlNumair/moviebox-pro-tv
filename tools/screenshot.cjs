@@ -300,6 +300,81 @@ const screenIs = name => { const r = document.getElementById('mbptv'); return !!
     }]
   ];
 
+  // Search and filters (40-49): the Movies / TV Shows filter bar and sheet, People search and a person's titles.
+  async function openMoviesFilters(prefs) {
+    await fresh('/', prefs);
+    await K.waitScreen(page, 'home');
+    await K.waitFocus(page);
+    await K.activate(page, '[data-action="nav-movies"]');
+    await K.waitScreen(page, 'browse');
+    await K.waitUntil(page, 'grid cards', cardsIn, '.is-current [data-zone="grid"]', 8000);
+    await K.activate(page, '#mbptv .is-current [data-action="filters"]');
+    await K.waitUntil(page, 'the filter sheet', () => !!document.querySelector('#mbptv [data-sheet="filters"]'), null, 4000);
+  }
+  const sheetClosed = () => !document.querySelector('#mbptv [data-sheet="filters"]');
+  steps.push(
+    ['40-filter-sheet', async () => { await openMoviesFilters(); await settle(700); }],
+    ['41-filter-sheet-chosen', async () => {
+      await openMoviesFilters();
+      for (const sel of ['[data-filter="sort"][data-value="rating"]', '[data-filter="genr"][data-value="1"]', '[data-filter="genr"][data-value="8"]', '[data-filter="year"][data-value="2023"]', '[data-filter="min"][data-value="7"]']) await K.activate(page, sel);
+      await settle(600);
+    }],
+    ['42-movies-filtered', async () => {
+      if (!page || !(await page.evaluate(() => !!document.querySelector('#mbptv [data-sheet="filters"] [data-filter="min"].is-selected[data-value="7"]')).catch(() => false))) {
+        await openMoviesFilters();
+        for (const sel of ['[data-filter="sort"][data-value="rating"]', '[data-filter="genr"][data-value="1"]', '[data-filter="year"][data-value="2023"]', '[data-filter="min"][data-value="7"]']) await K.activate(page, sel);
+      }
+      await K.back(page);
+      await K.waitUntil(page, 'the filtered grid', sheetClosed, null, 4000);
+      await K.waitUntil(page, 'filtered cards', cardsIn, '.is-current [data-zone="grid"]', 10000);
+      await settle(1500);
+    }],
+    ['43-movies-filtered-grid', async () => {
+      if (!page || !(await onScreen('browse'))) throw new Error('run 42 first');
+      await K.navigateTo(page, '#mbptv .is-current [data-zone="grid"] [data-key]');
+      await settle(900);
+    }],
+    ['44-search-browse-chips', async () => {
+      await fresh('/');
+      await ensureSearch();
+      await K.navigateTo(page, '[data-browse="Comedy"]');
+      await settle(900);
+    }],
+    ['45-search-people-typing', async () => {
+      await fresh('/');
+      await ensureSearch();
+      await K.activate(page, '[data-type="actor"]');
+      await K.typeOnScreen(page, 'hanks');
+      await settle(700);
+    }],
+    ['46-search-people-results', async () => {
+      if (!page || !(await onScreen('search'))) { await fresh('/'); await ensureSearch(); await K.activate(page, '[data-type="actor"]'); await K.typeOnScreen(page, 'hanks'); }
+      await K.activate(page, '[data-action="search-submit"]');
+      await K.waitUntil(page, 'person cards', () => document.querySelectorAll('#mbptv [data-person]').length > 0, null, 8000);
+      await settle(1500);
+    }],
+    ['47-person-titles', async () => {
+      if (!page || !(await page.evaluate(() => !!document.querySelector('#mbptv [data-zone="grid"] [data-person]')).catch(() => false))) throw new Error('run 46 first');
+      await K.activate(page, '[data-person="17848"]');
+      await K.waitScreen(page, 'browse');
+      await K.waitUntil(page, 'their titles', cardsIn, '.is-current [data-zone="grid"]', 8000);
+      await settle(1600);
+    }],
+    ['48-tvshows-filter-sheet-perf-off', async () => {
+      await fresh('/', { performance: 'off' });
+      await K.waitScreen(page, 'home');
+      await K.waitFocus(page);
+      await K.activate(page, '[data-action="nav-shows"]');
+      await K.waitScreen(page, 'browse');
+      await K.waitUntil(page, 'grid cards', cardsIn, '.is-current [data-zone="grid"]', 8000);
+      await K.activate(page, '#mbptv .is-current [data-action="filters"]');
+      await K.waitUntil(page, 'the filter sheet', () => !!document.querySelector('#mbptv [data-sheet="filters"]'), null, 4000);
+      await K.navigateTo(page, '[data-filter="tomato_meter"][data-value="FRESH"]');
+      await K.press(page, 'Enter', 1, 200);
+      await settle(700);
+    }]
+  );
+
   const results = [];
   for (const [name, run] of steps) {
     if (only.length && !only.some(o => name.indexOf(o) === 0)) continue;

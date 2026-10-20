@@ -32,7 +32,8 @@ var Icons = (function () {
     motion: '<path d="M3 11h8.6v2H3zm2-4.5h9v2H5zm0 9h9v2H5zM16.5 5a7 7 0 0 1 0 14v-2.2a4.8 4.8 0 0 0 0-9.6z"/>',
     remote: '<path fill-rule="evenodd" d="M8.4 2h7.2c.8 0 1.4.6 1.4 1.4v17.2c0 .8-.6 1.4-1.4 1.4H8.4c-.8 0-1.4-.6-1.4-1.4V3.4C7 2.6 7.6 2 8.4 2zM12 4.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8zM9.6 12v2h2v-2zm2.8 0v2h2v-2zm-2.8 3.2v2h2v-2zm2.8 0v2h2v-2z"/>',
     subtitles: '<path fill-rule="evenodd" d="M4.2 4.5h15.6c.7 0 1.2.5 1.2 1.2v12.6c0 .7-.5 1.2-1.2 1.2H4.2c-.7 0-1.2-.5-1.2-1.2V5.7c0-.7.5-1.2 1.2-1.2zM5.2 6.7v10.6h13.6V6.7zM6.8 11.4h4.8v1.9H6.8zm6.2 0h4.2v1.9H13zm-6.2 3h7.4v1.9H6.8zm8.6 0h1.8v1.9h-1.8z"/>',
-    spark: '<path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/>'
+    spark: '<path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9zM19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9z"/>',
+    filter: '<path d="M3 6h18v2.2H3zm0 9.8h18V18H3z"/><circle cx="15.5" cy="7.1" r="2.9"/><circle cx="8.5" cy="16.9" r="2.9"/>'
   };
 
   function markup(name) {
@@ -328,8 +329,12 @@ var Kit = (function () {
       if (item.rating) sub.push(item.rating);
       if (sub.length) {
         var s = el('div', 'mb-card-sub', null, c);
-        el('span', null, sub[0], s);
-        if (sub[1]) { s.appendChild(Icons.el('star', 'mb-card-star')); el('span', null, sub[1], s); }
+        /* A rating alone (a page that names no year) still reads as a rating. */
+        if (sub.length === 1 && sub[0] === item.rating) { s.appendChild(Icons.el('star', 'mb-card-star mb-card-star--first')); el('span', null, sub[0], s); }
+        else {
+          el('span', null, sub[0], s);
+          if (sub[1]) { s.appendChild(Icons.el('star', 'mb-card-star')); el('span', null, sub[1], s); }
+        }
       }
     }
     return c;

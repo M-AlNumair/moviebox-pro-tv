@@ -810,10 +810,16 @@ async function main() {
     await activate(page, '[data-key="movie:40102"]');
     await waitScreen(page, 'detail');
     await activate(page, '[data-action="play"]');
-    await waitUntil(page, 'the error card with "Try website player" focused', () => {
+    // The movie has two files, so "Try another file" leads; the website's player is two steps right (after Try again).
+    await waitUntil(page, 'the error card with "Try another file" focused', () => {
       const card = document.querySelector('#mbptv-player [data-dialog="player-error"]'), f = card && card.querySelector('.is-focused');
-      return !!card && card.getBoundingClientRect().width > 0 && !!f && f.getAttribute('data-action') === 'website';
+      return !!card && card.getBoundingClientRect().width > 0 && !!f && f.getAttribute('data-action') === 'other-file';
     }, null, 20000);
+    await press(page, 'ArrowRight', 2, 200);
+    await waitUntil(page, '"Try website player" focused', () => {
+      const f = document.querySelector('#mbptv-player [data-dialog="player-error"] .is-focused');
+      return !!f && f.getAttribute('data-action') === 'website';
+    }, null, 4000);
     await press(page, 'Enter', 1, 200);
     await page.waitForURL(/\/movie\/40102\?play=1/, { timeout: 8000 });
     await waitUntil(page, 'the website\'s player (player mode) on the ?play=1 page', () => window.__mbptv && window.__mbptv.App.state().mode === 'player', null, 15000);

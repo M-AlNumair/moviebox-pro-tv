@@ -693,13 +693,15 @@ var Site = (function () {
     var out = { title: '', items: [], next: '', chips: [] };
     if (!doc || !doc.documentElement) return out;
     var base = baseOf(doc, url);
-    var head = qs(doc, 'span[style*="font-size:24px"], span[style*="font-size: 24px"]') || qs(doc, '.contents h1, .contents h2');
+    var head = qs(doc, 'span[style*="font-size:24px"], span[style*="font-size: 24px"]') || qs(doc, '.filmmaker > .name') || qs(doc, '.contents h1, .contents h2');
     out.title = textOf(head) || docTitle(doc);
     var scope = qs(doc, '.contents') || doc;
     out.items = cards(scope, { base: base });
     if (!out.items.length && scope !== doc) out.items = cards(doc, { base: base });
     out.next = nextFrom(doc, base);
     out.chips = chipsFrom(doc, base);
+    var f = filters(doc, base);
+    if (f) out.filters = f;
     return out;
   }
 
@@ -725,6 +727,8 @@ var Site = (function () {
     if (!selected) U.each(out.types, function (t) { t.selected = t.type === out.type; });
     var roots = U.filter(qsa(doc, '.search_info > a[href]'), function (a) { return !!targetInfo(a, base); });
     out.items = dedupe(U.map(roots, function (a) { return itemFrom(a, base); }));
+    var mobile = !out.items.length ? mobileResults(doc, base) : [];
+    if (mobile.length) out.items = mobile;
     if (!out.items.length) out.items = cards(qs(doc, '.search_info') || qs(doc, '.result') || doc, { base: base });
     var pls = qsa(doc, '.playlists a[href*="/playlist/"]');
     if (!pls.length) pls = U.filter(qsa(doc, 'a[href*="/playlist/"]'), function (a) { return !!qs(a, '.name, .list_img'); });
@@ -741,7 +745,204 @@ var Site = (function () {
       });
     });
     out.next = nextFrom(doc, base);
+    /* The mobile layout has no pagination links (the site's script asks for more pages as it scrolls); the same URL
+       with page=N+1 answers the next 15 results, and the type filter applies there too. */
+    if (!out.next && mobile.length >= MOBILE_SEARCH_PAGE) out.next = searchHref(out.query, out.type, Math.max(1, toInt(u.query.page) || 1) + 1);
     out.empty = out.items.length === 0;
+    return out;
+  }
+
+  /* Mobile search layout (served to TV user agents, seen live 2026-10-20): `.section2 li > a[href=/movie|tvshow/ID]`
+     holding the poster `i img`, `span.title` ("The Batman <span.grey>(2022)</span>"), `span.year` ("176 min  ACTION,
+     CRIME"), `span.time` (the IMDb rating) and the overview. 15 results per page, no result count, no type tabs. */
+  var MOBILE_SEARCH_PAGE = 15;
+  function directText(el) {
+    var out = '';
+    U.each(el ? el.childNodes : [], function (n) { if (n.nodeType === 3) out += n.nodeValue; });
+    return U.text(out);
+  }
+
+  function mobileResults(doc, base) {
+    var out = [];
+    U.each(qsa(doc, '.section2 li a[href]'), function (a) {
+      var t = targetInfo(a, base);
+      if (!t || t.p.play) return;
+      var item = blankItem(t.p.kind, t.p.id, base);
+      var titleEl = qs(a, '.title');
+      item.title = directText(titleEl) || textOf(titleEl) || U.text(attr(a, 'title'));
+      item.year = yearOf(textOf(qs(titleEl, '.grey')));
+      item.poster = posterFor(a, base);
+      var facts = textOf(qs(a, '.year'));
+      item.runtime = normRuntime(facts);
+      var genres = U.text(facts.replace(/\d+\s*(?:min|mins|minutes?)\b/i, ''));
+      if (genres && isGenreList(genres)) item.genres = splitGenres(genres);
+      item.rating = normRating(textOf(qs(a, '.time')));
+      item.badge = badgeFor(a);
+      out.push(item);
+    });
+    return dedupe(out);
+  }
+
+  /* ---------- Movies / TV Shows filters (section 3: the list pages' own filter panel) ---------- */
+
+  /* The site's filter panel (`.screenbg-filter .screencon`, one `[data-name]` group per filter, `.elect` options with
+     a `query` attribute, `.elected` = applied) builds `/movie?sort=&tomato_meter=&rating=&quality=&year=&genr=&country=`
+     (`/tvshow?...` for shows). The server reads each parameter (empty ones may be left out); genres join with "-",
+     countries with ",". The FILTER_* lists are the fallback when a page carries no panel (captured live 2026-10-20). */
+  var FILTER_ORDER = ['sort', 'genr', 'year', 'tomato_meter', 'quality', 'rating', 'country'];
+  var FILTER_MULTI = { genr: true, country: true };
+  var FILTER_TITLES = { sort: 'Sort by', genr: 'Genre', year: 'Year', tomato_meter: 'Rotten Tomatoes', quality: 'Quality', rating: 'Age rating', country: 'Country' };
+  var SORT_LABELS = { add: 'Recently added', rating: 'IMDb rating', tomato_meter: 'Rotten Tomatoes', view: 'Most watched', released: 'Release date' };
+  var QUALITY_LABELS = { 'BLU-RAY': 'Blu-ray', WEBDL: 'WEB-DL', TC: 'TC' };
+  var GENRES = [['1', 'Action'], ['2', 'Adventure'], ['3', 'Animation'], ['4', 'Biography'], ['5', 'Comedy'], ['6', 'Crime'],
+    ['7', 'Documentary'], ['8', 'Drama'], ['9', 'Family'], ['10', 'Fantasy'], ['11', 'Film-Noir'], ['12', 'History'], ['13', 'Horror'],
+    ['14', 'Music'], ['15', 'Mystery'], ['16', 'Romance'], ['17', 'Sci-Fi'], ['18', 'Sport'], ['19', 'Thriller'], ['20', 'War'],
+    ['21', 'Western'], ['22', 'Christmas'], ['24', 'Reality-TV'], ['45', 'News'], ['51', 'Game-Show'], ['52', 'Talk-Show'], ['53', 'Short']];
+  var YEARS = ['2026', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2010-2015', '2000-2009',
+    '1990-1999', '1980-1989', '1970-1979', '1960-1969', 'Before 1960'];
+  var COUNTRIES = ['United States', 'United Kingdom', 'Canada', 'France', 'India', 'Japan', 'Germany', 'Italy', 'Spain', 'China',
+    'Australia', 'South Korea', 'Hong Kong', 'Russia', 'Mexico', 'Belgium', 'Sweden', 'Ireland', 'Netherlands', 'Brazil', 'Poland',
+    'Denmark', 'Argentina', 'Turkey', 'Czech Republic', 'Switzerland', 'Taiwan', 'South Africa', 'Romania', 'Norway', 'Philippines',
+    'Thailand', 'New Zealand', 'Austria', 'Israel', 'Hungary', 'Indonesia', 'Finland', 'Nigeria', 'Chile', 'Portugal', 'Iran',
+    'Colombia', 'Greece'];
+  var MAX_FILTER_OPTIONS = 60, MAX_COUNTRIES = 40;
+
+  function opt(value, label) { return { value: String(value), label: String(label) }; }
+
+  function filterLabel(name, value, text) {
+    var t = U.text(text || value);
+    if (name === 'sort') return SORT_LABELS[value] || U.titleCase(t);
+    if (name === 'quality') return QUALITY_LABELS[value] || (/^[A-Z0-9]{1,5}$/.test(t) ? t : U.titleCase(t));
+    if (name === 'tomato_meter' || name === 'genr') return U.titleCase(t.replace(/-(?=FRESH)/i, ' '));
+    return t;
+  }
+
+  function emptyFilters() { return { sort: '', genr: [], year: '', tomato_meter: '', quality: '', rating: '', country: [] }; }
+
+  function filterSpec(kind) {
+    var tv = kindOf(kind) === 'tv';
+    var lists = {
+      sort: tv ? ['rating', 'tomato_meter', 'view'] : ['add', 'rating', 'tomato_meter', 'view'],
+      genr: GENRES,
+      year: YEARS,
+      tomato_meter: tv ? ['FRESH', 'Rotten'] : ['CERTIFIED-FRESH', 'FRESH', 'Rotten'],
+      quality: ['4K', 'BLU-RAY', 'WEBDL', 'HDTV', 'DVD', 'TC'],
+      rating: tv ? ['TV-Y', 'TV-Y7', 'TV-G', 'TV-PG', 'TV-14', 'TV-MA'] : ['G', 'PG', 'PG-13', 'R', 'NC-17'],
+      country: COUNTRIES
+    };
+    var groups = U.map(FILTER_ORDER, function (name) {
+      return { name: name, title: FILTER_TITLES[name], multi: !!FILTER_MULTI[name], options: U.map(lists[name], function (v) {
+        return isArray(v) ? opt(v[0], v[1]) : opt(v, filterLabel(name, v, v.replace(/-(?=FRESH)/, ' ')));
+      }) };
+    });
+    return { kind: tv ? 'tv' : 'movie', groups: groups, selected: emptyFilters(), live: false };
+  }
+
+  /* {kind, groups: [{name, title, multi, options: [{value, label}]}], selected: {sort, genr: [], ...}, live: true}
+     from a list page's own panel (groups the page lacks come from the fallback lists), or null without a panel.
+     kind: 'tv' on /tvshow (or a panel titled "TV RATINGS"), else 'movie'. */
+  function filters(doc, url) {
+    if (!doc || !doc.documentElement) return null;
+    var panel = qs(doc, '.screenbg-filter .screencon') || qs(doc, '.screencon');
+    if (!panel || !qs(panel, '[data-name] .elect, [data-name] .elected')) return null;
+    var path = U.parseUrl(baseOf(doc, url)).pathname || '';
+    var k = /^\/tvshow\b/.test(path) || /\btv\s+ratings\b/i.test(textOf(qs(panel, '.movie_ratings .title'))) ? 'tv' : 'movie';
+    var spec = filterSpec(k), byName = {};
+    var out = { kind: k, groups: [], selected: emptyFilters(), live: true };
+    U.each(qsa(panel, '[data-name]'), function (box) {
+      var name = attr(box, 'data-name');
+      if (U.indexOf(FILTER_ORDER, name) < 0 || byName[name]) return;
+      var options = [], seen = {};
+      U.each(qsa(box, '.elect, .elected'), function (o) {
+        var text = U.text(textOf(o)), value;
+        if (name === 'year') value = text;
+        else if (name === 'country') {
+          /* Named flags only: the panel also lists codes and places ("IN", "Utah") as text badges. */
+          if (o.tagName !== 'IMG') return;
+          value = text = U.text(attr(o, 'title'));
+        } else value = U.text(attr(o, 'query'));
+        if (!value || seen['$' + value]) return;
+        seen['$' + value] = true;
+        if (U.hasClass(o, 'elected')) {
+          if (FILTER_MULTI[name]) out.selected[name].push(value);
+          else if (!(name === 'sort' && value === 'add')) out.selected[name] = value;
+        }
+        if (options.length < MAX_FILTER_OPTIONS) options.push(opt(value, filterLabel(name, value, text)));
+      });
+      if (name === 'country') options = options.slice(0, MAX_COUNTRIES);
+      /* The panel lists qualities from worst to best; the TV lists the best first. */
+      if (name === 'quality') options.reverse();
+      if (options.length) byName[name] = { name: name, title: FILTER_TITLES[name], multi: !!FILTER_MULTI[name], options: options };
+    });
+    U.each(spec.groups, function (g) { out.groups.push(byName[g.name] || g); });
+    return out;
+  }
+
+  /* A filter state with every field present and only well-formed values (sessionStorage and old params survive). */
+  function normFilters(f) {
+    var out = emptyFilters();
+    if (!f || typeof f !== 'object') return out;
+    U.each(FILTER_ORDER, function (name) {
+      var v = f[name];
+      if (FILTER_MULTI[name]) {
+        var list = isArray(v) ? v : (typeof v === 'string' && v ? v.split(name === 'genr' ? '-' : ',') : []);
+        out[name] = uniqStrings(U.map(list, function (x) { return typeof x === 'string' || typeof x === 'number' ? U.text(String(x)) : ''; }), 40);
+      } else out[name] = typeof v === 'string' || typeof v === 'number' ? U.text(String(v)).slice(0, 60) : '';
+    });
+    if (out.sort === 'add') out.sort = '';
+    return out;
+  }
+
+  /* The list URL for a filter state: /movie or /tvshow plus only the parameters that are set (the bare path when none,
+     so it is the same page, and cache entry, as the rail's Movies). */
+  function browseUrl(kind, f, page) {
+    f = normFilters(f);
+    var parts = [];
+    U.each(FILTER_ORDER, function (name) {
+      var v = f[name];
+      if (FILTER_MULTI[name]) { if (v.length) parts.push(name + '=' + U.map(v, enc).join(name === 'genr' ? '-' : ',')); }
+      else if (v) parts.push(name + '=' + enc(v));
+    });
+    if (toInt(page) > 1) parts.push('page=' + toInt(page));
+    return siteOrigin() + (kindOf(kind) === 'tv' ? '/tvshow' : '/movie') + (parts.length ? '?' + parts.join('&') : '');
+  }
+
+  /* ---------- People (the website's own actor search and actor pages) ---------- */
+
+  function personId(href, base) {
+    var abs = sameSiteUrl(href, base);
+    var m = abs ? /^\/actor\/(\d+)$/.exec(U.parseUrl(abs).pathname || '') : null;
+    return m ? m[1] : '';
+  }
+
+  /* The website's actor search answers {code: 1, data: {list: HTML}} (POST /index/search/search?key=Q with
+     key, page, type=actor and ajax=1: the request its own script makes); each `a[href=/actor/ID]` holds `.avatar`
+     (a background picture) or `.avatar2` (initials), `.name` and "130 <span>Movies</span> 38 <span>TV Shows</span>".
+     10 per page. Returns [{id, key, name, href, image, movies, shows}] (counts -1 when not given). */
+  function people(input, base) {
+    var data = asData(input), html = '';
+    if (typeof input === 'string' && data == null) html = input;
+    else if (data && typeof data === 'object') {
+      var d = data.data != null ? data.data : data;
+      html = typeof d === 'string' ? d : (d && (d.list || d.html)) || '';
+    }
+    var out = [], seen = {};
+    if (typeof html !== 'string' || !html) return out;
+    base = httpish(base) ? String(base) : defaultBase();
+    var doc = U.parseHTML(html);
+    U.each(qsa(doc, 'a[href*="/actor/"]'), function (a) {
+      var id = personId(attr(a, 'href'), base);
+      if (!id || seen[id]) return;
+      var name = textOf(qs(a, '.name')) || U.text(attr(a, 'title')) || textOf(a);
+      if (!name || name.length > 120) return;
+      seen[id] = true;
+      var counts = textOf(a), mv = /(\d+)\s*Movies?\b/i.exec(counts), tv = /(\d+)\s*TV\s*Shows?\b/i.exec(counts);
+      out.push({
+        id: id, key: 'person:' + id, name: name, href: originOf(base) + '/actor/' + id,
+        image: bgUrl(qs(a, '.avatar'), base) || imgUrl(qs(a, 'img'), base),
+        movies: mv ? toInt(mv[1]) : -1, shows: tv ? toInt(tv[1]) : -1
+      });
+    });
     return out;
   }
 
@@ -833,8 +1034,57 @@ var Site = (function () {
     });
   }
 
+  /* The mobile title page (what the site serves to TV user agents since 2026-10): facts sit in `.con_right` --
+     `p.type` "<span>R</span>crime,drama", `p.length` "<span>1972</span><span>2h 55min</span>" (shows: a date and
+     "Update to S03 E06"), `.score > div` with freshness/audience pictures and `p.score2`, the overview in `p.desc2 span`
+     or `p.desc span`, the backdrop only in a `<style>` rule `.contents .con_bg{background:url(...)}`; the files are
+     `#file_bg li.play[oss_download_url]` (see source()). Fills what the desktop rules left empty. */
+  function mobileFactsInto(doc, base, d) {
+    var right = qs(doc, '.con_right');
+    if (!right) return;
+    U.each(qsa(right, 'p.length span'), function (sp) {
+      var t = textOf(sp), up = /Update to\b.*$/i.exec(t);
+      if (up && !d.update) d.update = U.text(up[0]);
+      else if (!d.year && /^(?:18|19|20)\d\d$/.test(t)) d.year = t;
+      else if (!d.runtime && normRuntime(t)) d.runtime = normRuntime(t);
+    });
+    var type = qs(right, 'p.type');
+    if (type) {
+      var cert = textOf(qs(type, 'span')), rest = U.text(String(type.textContent || '').slice(String(qs(type, 'span') ? qs(type, 'span').textContent : '').length));
+      if (!d.certification && CERT_RE.test(cert)) d.certification = cert;
+      if (!d.genres.length && rest && /^[A-Za-z][A-Za-z&'\-\/\s]*(?:,\s*[A-Za-z][A-Za-z&'\-\/\s]*)*$/.test(rest)) d.genres = splitGenres(rest);
+    }
+    U.each(qsa(right, '.score > div'), function (box) {
+      var img = attr(qs(box, 'img'), 'src'), v = normRating(textOf(qs(box, '.score2')));
+      if (/audience/i.test(img)) { if (!d.ratings.audience) d.ratings.audience = v; }
+      else if (/fresh|tomato|rotten/i.test(img) && !d.ratings.tomato) d.ratings.tomato = v;
+    });
+    var ov = textOf(qs(right, 'p.desc2 span')) || textOf(qs(doc, '.contents .list p.desc span'));
+    if (ov) d.overview = ov;
+    if (!d.backdropOriginal) {
+      U.each(qsa(doc, 'style'), function (st) {
+        var m = /\.con_bg\s*\{([^}]*)\}/.exec(String(st.textContent || ''));
+        var u = m ? firstReal(styleUrls(m[1]), base) : '';
+        if (u) { d.backdropOriginal = u; return false; }
+      });
+      d.backdrop = d.backdropOriginal.replace('/t/p/original/', '/t/p/w1280/');
+    }
+  }
+
   function castOf(doc, base) {
     var out = [], seen = {};
+    /* Mobile layout: `.actor > div` per person with `a[href=/actor/ID] p.avatar`, `p.name`, `p.role`, `p.position`. */
+    U.each(qsa(doc, '.actor > div'), function (box) {
+      var nameEl = qs(box, '.name');
+      var a = qs(box, 'a[href*="/actor/"]');
+      if (!nameEl || !a || qs(box, '.personnel')) return;
+      var name = textOf(nameEl);
+      if (!name || seen['$' + name]) return;
+      seen['$' + name] = true;
+      var character = textOf(qs(box, '.role')), job = U.titleCase(textOf(qs(box, '.position')));
+      out.push({ name: name, role: character || job, character: character, job: job,
+        image: bgUrl(qs(box, '.avatar'), base) || imgUrl(qs(box, 'img'), base), href: sameSiteUrl(attr(a, 'href'), base) });
+    });
     U.each(qsa(doc, '.actor a'), function (a) {
       var per = qs(a, '.personnel');
       if (!per) return;
@@ -993,7 +1243,7 @@ var Site = (function () {
      unwatched episode (seasons and episodes from 1: specials are never picked on their own); else the first episode.
      null when the page lists no episodes to choose from (the caller then lets the website decide). */
   function nextEpisodeOf(d) {
-    var m = /S(\d{1,4})\s*E(\d{1,4})/i.exec(d.playLabel || '');
+    var m = /S(\d{1,4})\s*:?\s*E(\d{1,4})/i.exec(d.playLabel || '');   /* "S2E3", mobile "CONTINUE S1:E1" */
     if (m && toInt(m[1]) > 0) return { season: toInt(m[1]), episode: toInt(m[2]), code: 'S' + toInt(m[1]) + 'E' + toInt(m[2]), resume: true };
     var seasons = [];
     for (var k in d.allEpisodes) if (d.allEpisodes.hasOwnProperty(k) && toInt(k) > 0 && d.allEpisodes[k].length) seasons.push(toInt(k));
@@ -1026,6 +1276,7 @@ var Site = (function () {
     d.year = yearOf(textOf(qs(doc, '.year')));
     d.playLabel = 'PLAY';
     d.related = relatedOf(doc, base, d.key);
+    d.cast = castOf(doc, base);
     return d;
   }
 
@@ -1055,6 +1306,8 @@ var Site = (function () {
     d.playLabel = textOf(qs(doc, '#save_progress')) || textOf(qs(doc, '.start_app .play span')) || textOf(qs(doc, '.start_app')) || 'PLAY';
     var lis = qsa(doc, '.sidebarbg2 li.play[oss_download_url]');
     if (!lis.length) lis = qsa(doc, '.sidebarbg2 li.play');
+    if (!lis.length) lis = qsa(doc, '#file_bg li.play[oss_download_url]');   /* the mobile layout (TV user agents) */
+    mobileFactsInto(doc, base, d);
     d.sources = U.map(lis, function (li, i) { return source(li, i); });
     d.cast = castOf(doc, base);
     d.related = relatedOf(doc, base, d.key);
@@ -1345,9 +1598,12 @@ var Site = (function () {
     if (U.isVisible(el)) { try { el.style.setProperty('display', 'none', 'important'); } catch (e) {} }
   }
 
+  /* The website's file picker: `.sidebarbg2` (desktop layout) or `#file_bg` (the mobile layout TV user agents get). */
+  var PICKER_SEL = '.sidebarbg2, #file_bg';
+
   function liveSourceItems() {
-    var items = visibleOnly(qsa(document, '.sidebarbg2 li.play'));
-    return items.length ? items : visibleOnly(qsa(document, '.sidebarbg2 li[oss_download_url]'));
+    var items = visibleOnly(qsa(document, '.sidebarbg2 li.play, #file_bg li.play'));
+    return items.length ? items : visibleOnly(qsa(document, '.sidebarbg2 li[oss_download_url], #file_bg li[oss_download_url]'));
   }
 
   /* ---------- quiet: the hidden website page stops downloading pictures ---------- */
@@ -1471,15 +1727,15 @@ var Site = (function () {
     sourceList: function () {
       return U.map(liveSourceItems(), function (li, i) { var s = source(li, i); s.el = li; return s; });
     },
-    sourcePickerOpen: function () { return visibleOnly(qsa(document, '.sidebarbg2')).length > 0; },
+    sourcePickerOpen: function () { return visibleOnly(qsa(document, PICKER_SEL)).length > 0; },
     closeSourcePicker: function () {
-      var boxes = visibleOnly(qsa(document, '.sidebarbg2'));
+      var boxes = visibleOnly(qsa(document, PICKER_SEL));
       U.each(boxes, function (box) {
-        var btn = visibleOnly(qsa(box, '.close'))[0] || qs(box, '.close');
-        if (btn) click(qs(btn, 'img') || btn);
+        var btn = visibleOnly(qsa(box, '.close, .fav_close'))[0] || qs(box, '.close, .fav_close');
+        if (btn) click(btn.tagName === 'IMG' ? btn : qs(btn, 'img') || btn);
         forceHide(box);
       });
-      return visibleOnly(qsa(document, '.sidebarbg2')).length === 0;
+      return visibleOnly(qsa(document, PICKER_SEL)).length === 0;
     },
     playerOpen: livePlayerOpen,
     playerContainer: playerContainer,
@@ -1509,6 +1765,10 @@ var Site = (function () {
 
   function enc(v) { return encodeURIComponent(U.text(v)); }
 
+  function searchHref(q, type, page) {
+    return siteOrigin() + '/index/search?word=' + enc(q) + (type ? '&type=' + enc(type) : '') + (toInt(page) > 1 ? '&page=' + toInt(page) : '');
+  }
+
   var url = {
     origin: function () { return siteOrigin(); },
     home: function () { return siteOrigin() + '/'; },
@@ -1517,9 +1777,14 @@ var Site = (function () {
     library: function () { return siteOrigin() + '/index/index/my_box'; },
     history: function () { return siteOrigin() + '/index/index/history'; },
     list: function (type) { return siteOrigin() + '/index/index/movie_list?type=' + enc(type); },
-    search: function (q, type, page) {
-      return siteOrigin() + '/index/search?word=' + enc(q) + (type ? '&type=' + enc(type) : '') + (toInt(page) > 1 ? '&page=' + toInt(page) : '');
-    },
+    search: function (q, type, page) { return searchHref(q, type, page); },
+    /* Movies or TV Shows with the filter panel's parameters (filters may be omitted). */
+    browse: function (kind, f, page) { return browseUrl(kind, f, page); },
+    /* The website's actor search (POST: body from peopleBody), its actor page and an actor's full list per kind. */
+    people: function (q) { return siteOrigin() + '/index/search/search?key=' + enc(q); },
+    peopleBody: function (q, page) { return 'key=' + enc(q) + '&page=' + Math.max(1, toInt(page) || 1) + '&type=actor&ajax=1'; },
+    person: function (id) { return siteOrigin() + '/actor/' + toInt(id); },
+    personWorks: function (id, kind) { return siteOrigin() + '/index/index/actor_works?id=' + toInt(id) + '&type=' + (kindOf(kind) === 'tv' ? 'tv' : 'movie'); },
     title: function (kind, id, season) {
       return siteOrigin() + titlePath(kind, id) + (kindOf(kind) === 'tv' && toInt(season) > 0 ? '?season=' + toInt(season) : '');
     },
@@ -1560,6 +1825,11 @@ var Site = (function () {
     home: total('home', home, function () { return { rows: [], banners: [] }; }),
     list: total('list', list, function () { return { title: '', items: [], next: '', chips: [] }; }),
     search: total('search', search, function () { return { query: '', type: 'all', total: null, types: [], items: [], playlists: [], next: '', empty: true }; }),
+    filters: total('filters', filters, null),
+    filterSpec: total('filterSpec', filterSpec, function () { return { kind: 'movie', groups: [], selected: emptyFilters(), live: false }; }),
+    normFilters: total('normFilters', normFilters, emptyFilters),
+    people: total('people', people, function () { return []; }),
+    personId: total('personId', function (href, base) { return personId(href, httpish(base) ? base : defaultBase()); }, emptyStr),
     detail: total('detail', detail, null),
     source: total('source', source, function () { return { index: 0, quality: '', file: '', size: '', date: '', url: '' }; }),
     thumb: function (u, w, q) { try { return thumb(u, w, q); } catch (e) { try { Log.warn('site:thumb', e); } catch (e2) {} return u; } },

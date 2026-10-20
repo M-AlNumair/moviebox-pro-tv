@@ -78,7 +78,7 @@ Version 0.3.1 answers the feedback from testing 0.3.0 on a Samsung TV.
 
    Do not add `gh/`, a full URL or a version tag.
 4. **Fully close TizenBrew and open it again**, then launch **MovieBox Pro TV**. TizenBrew only loads a new or changed module when it restarts.
-5. Check the version under **Settings > About**. It should show **0.4.1**.
+5. Check the version under **Settings > About**. It should show **0.5.0**.
 
 **Updates arrive by themselves.** Without a tag, TizenBrew loads the latest published version through the jsDelivr CDN (`cdn.jsdelivr.net/gh/M-AlNumair/moviebox-pro-tv/tv.js`) each time it starts. After a release the CDN cache is purged, so restarting TizenBrew is enough. **To pin or roll back**, add `M-AlNumair/moviebox-pro-tv@vX.Y.Z` instead (tags never change), restart TizenBrew and remove the other entry. After it works, you can select the module in **TizenBrew Settings > Autolaunch**.
 
@@ -133,7 +133,7 @@ A USB or Bluetooth keyboard also types into Search, and Backspace deletes. Pop-u
 - **Captions or audio language.** The built-in player plays the file's default audio track and has no caption menu yet. For captions or another audio language, turn off **Settings > Built-in player** and, during playback, press **Blue** to reach the website player's own controls. Press Back to return to the TV player.
 - **Diagnostics.** **Settings > Diagnostics** shows the module version, the TV's browser version (user agent), the page type, the last website self-test and the last 30 log lines. Include a photo of this screen when you report a problem. Search words and similar details are masked in the log and on this screen.
 - **The website's own controls conflict with the remote.** Turn off **Settings > Website remote controls**.
-- **The TV interface does not appear, or an update did not take effect.** In TizenBrew's Module Manager, check that the module entry is `M-AlNumair/moviebox-pro-tv` (or a pinned tag such as `M-AlNumair/moviebox-pro-tv@v0.4.1`), then fully restart TizenBrew. If a newer version misbehaves, pin the previous tag.
+- **The TV interface does not appear, or an update did not take effect.** In TizenBrew's Module Manager, check that the module entry is `M-AlNumair/moviebox-pro-tv` (or a pinned tag such as `M-AlNumair/moviebox-pro-tv@v0.5.0`), then fully restart TizenBrew. If a newer version misbehaves, pin the previous tag.
 - **The website changed.** The module keeps working with generic title detection, but some details may be missing. The Diagnostics self-test lists what it could not find. Report it so the adapter can be updated.
 
 ## Privacy
