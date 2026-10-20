@@ -2,10 +2,13 @@
    app itself) is published and offers it on Home. Nothing is downloaded or installed unless the viewer presses Install.
    Samsung (Tizen) only, never on the LG webOS port. Once per launch (sessionStorage), after Home has been idle for 3 s;
    Later snoozes that version for this launch (24 h if the launch keeps running). Every failure is logged and shows
-   nothing; the dialog never traps the viewer for good. */
+   nothing, except "access denied" (the service's GitHub token for the private release repo expired or was revoked):
+   that shows a dialog with OK, since only a new build fixes it. A token that expires within 14 days shows a toast.
+   The dialog never traps the viewer for good. */
 var Update = (function () {
   var WS_URL = 'ws://127.0.0.1:8081/mbp-update', KEY = 'mbptv:update:v1';
   var IDLE_MS = 3000, TICK_MS = 500, REPLY_MS = 6000, STALL_MS = 90000, INSTALL_STALL_MS = 180000, DAY = 86400000;
+  var EXPIRY_WARN_MS = 14 * DAY;
   var TITLE = 'MovieBox Pro app update';
   var poll = null, idle = 0, idleKey = null, checking = false, stopped = false;
   var conn = null, stallTimer = null, connectTimer = null;
@@ -155,8 +158,14 @@ var Update = (function () {
     }
     var s = load(), last = s.last;
     save({ at: U.now(), last: null });
-    note(p.ok === false ? 'Check failed: ' + str(p.error) : p.available ? 'Version ' + str(p.latest) + ' available (installed ' + str(p.installed) + ')' : 'Up to date (' + str(p.installed) + ')');
+    var expires = tokenExpiry(p);
+    note((p.ok === false ? 'Check failed: ' + str(p.error) : p.available ? 'Version ' + str(p.latest) + ' available (installed ' + str(p.installed) + ')' : 'Up to date (' + str(p.installed) + ')') +
+      (expires ? ' · token expires ' + expires.date : ''));
     if (last && last.status === 'updated') App.toast('MovieBox Pro app updated to ' + str(last.version));
+    else if (expires && expires.soon && p.denied !== true) {
+      Log.warn('update', 'update token expires ' + expires.date);
+      App.toast('App update token expires ' + expires.date + '. Renew it on the Mac.', 8000);
+    }
     if (last && last.status === 'failed') {
       if (c) c.close();
       lastFailed(last, p.installed);
@@ -169,6 +178,7 @@ var Update = (function () {
       return;
     }
     if (c) c.close();
+    if (p.ok === false && p.denied === true) { accessDenied(); return; }
     if (p.ok === false || !p.available) return;
     var later = s.later;
     if (later && later.version === p.latest && U.now() - (later.at || 0) < DAY) { Log.info('update', 'snoozed ' + str(p.latest)); return; }
@@ -238,6 +248,21 @@ var Update = (function () {
     Log.info('update', 'user chose Later');
     save({ later: { version: dlg && dlg.version || '', at: U.now() } });
     close();
+  }
+
+  /* {date: 'YYYY-MM-DD', soon} from the service's tokenExpiresAt (ms), or null. */
+  function tokenExpiry(p) {
+    var at = +p.tokenExpiresAt;
+    if (!(at > 0)) return null;
+    return { date: new Date(at).toISOString().slice(0, 10), soon: at - U.now() < EXPIRY_WARN_MS };
+  }
+
+  function accessDenied() {
+    Log.warn('update', 'access denied: the update token expired or was revoked');
+    render({ mode: 'result', lines: [
+      ['mb-body', 'Update check failed: access denied.'],
+      ['mb-body mb-update-notes', 'The app’s update token has expired or was revoked. Nothing was installed. Make a new token on the Mac and install a new build (UPDATE-PROMPT.md).']
+    ], buttons: [{ label: 'OK', action: 'update-ok', primary: true, run: close }] });
   }
 
   function lastFailed(last, installed) {

@@ -301,6 +301,35 @@ flow('busy on check: the progress dialog follows the running install', { script:
   assert.strictEqual(page.sent.filter(m => m.type === 'InstallAppUpdate').length, 0);
 });
 
+flow('access denied (token expired or revoked): a dialog with OK, nothing installed, Diagnostics says why', { script: checkOnly(reply({ ok: false, denied: true, error: 'access denied', latest: undefined, available: false, tokenExpiresAt: Date.UTC(2026, 0, 1) })) }, async page => {
+  const d = await waitDialog(page, 'the access-denied dialog', 'Update check failed: access denied.');
+  if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'update-denied.png') });
+  assert.ok(d.text.indexOf('update token has expired or was revoked. Nothing was installed.') >= 0, d.text);
+  assert.deepStrictEqual(d.actions, ['update-ok']);
+  assert.strictEqual(d.focus, 'update-ok');
+  assert.ok(!/token expires/.test(await toast(page)), 'no expiry toast on top of the denied dialog');
+  await K.press(page, 'Enter', 1, 250);
+  await noDialog(page);
+  assert.strictEqual(page.sent.filter(m => m.type === 'InstallAppUpdate').length, 0);
+  assert.strictEqual(await H.screen(page), 'home');
+  const n = await page.evaluate(() => JSON.parse(sessionStorage.getItem('mbptv:update:v1')).note);
+  assert.ok(/^Check failed: access denied · token expires 2026-01-01$/.test(n), n);
+});
+
+flow('token expires within 14 days: a toast, the offer still shows', { script: checkOnly(Object.assign({}, AVAILABLE, { tokenExpiresAt: Date.now() + 5 * 86400000 })) }, async page => {
+  await K.waitUntil(page, 'the expiry toast', () => /App update token expires \d{4}-\d\d-\d\d\. Renew it on the Mac\./.test((document.getElementById('mbptv-toast') || {}).textContent || ''));
+  await waitDialog(page, 'the update dialog', 'Version 2.0.7 is available.');
+});
+
+flow('token expires in more than 14 days: no toast', { script: checkOnly(reply({ tokenExpiresAt: Date.now() + 200 * 86400000 })) }, async page => {
+  await waitSent(page, 'CheckAppUpdate');
+  await page.waitForTimeout(1500);
+  assert.ok(!/token expires/.test(await toast(page)));
+  await noDialog(page);
+  const n = await page.evaluate(() => JSON.parse(sessionStorage.getItem('mbptv:update:v1')).note);
+  assert.ok(/^Up to date \(2\.0\.6\) · token expires \d{4}-\d\d-\d\d$/.test(n), n);
+});
+
 flow('connection refused: nothing shown, the app stays usable', { refuse: true }, async page => {
   await K.waitUntil(page, 'the failed check in the log', () => window.__mbptv.Log.entries().some(e => e.label === 'update' && /check failed/.test(e.msg)), null, 9000);
   await noDialog(page);
