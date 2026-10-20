@@ -1259,9 +1259,9 @@ var NativePlayer = (function () {
     Log.warn('player', 'stream ' + (c ? c.label + (c.synthetic ? ' (audio)' : '') + (viaHls ? ' [hls.js]' : '') : '?') + ' failed: ' + reason +
       (c ? ' after ' + ((U.now() - s.candStart) / 1000).toFixed(1) + ' s' : '') + (note ? ' (' + clean(note) + ')' : '') + mediaState());
     var v = ui.video, at = s.ready ? (v.currentTime > 0 ? v.currentTime : s.lastTime) : s.pendingAt;
-    /* The platform player refused an HLS stream outright (Samsung Tizen 9: media error 4): the same stream through
-       hls.js next, at the same position. */
-    if (c && c.hls && !c.synthetic && !viaHls && !s.ready && formatError(reason) && hlsRetryOk()) {
+    /* The platform player refused an HLS stream before playing a frame (Samsung Tizen 9: media error 4, often after
+       loadedmetadata with PIPELINE_ERROR_COULD_NOT_RENDER): the same stream through hls.js next, at the same position. */
+    if (c && c.hls && !c.synthetic && !viaHls && s.playedTry !== s.tryId && formatError(reason) && hlsRetryOk()) {
       var copy = {}, k;
       for (k in c) if (c.hasOwnProperty(k)) copy[k] = c[k];
       copy.engine = 'hlsjs';
@@ -1279,7 +1279,7 @@ var NativePlayer = (function () {
     }
     /* The TV's player refused an HLS stream before it even loaded: the other HLS renditions are built the same way,
        so the MP4 originals go next. */
-    if (c && c.hls && !c.synthetic && !s.ready && formatError(reason)) promoteFiles(s);
+    if (c && c.hls && !c.synthetic && s.playedTry !== s.tryId && formatError(reason)) promoteFiles(s);
     startCandidate(s, s.ci + 1, at, reason);
   }
 
