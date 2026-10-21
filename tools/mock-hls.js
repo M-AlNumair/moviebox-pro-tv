@@ -4,7 +4,12 @@
    startLoad/stopLoad, destroy) and "plays" an HLS master by reading it (XHR, no credentials) and handing the media
    address named in its #MOCK-MEDIA line to the <video> element, the way MSE would feed it. Test hooks live on
    window.__hlsMock: instances, loads (which copy loaded), fatal(type, details), stuckAudio (no switch event),
-   slowStart (ms of fragments arriving before the first frame) and bandwidth (the instances' bandwidthEstimate). */
+   slowStart (ms of fragments arriving before the first frame), bandwidth (the instances' bandwidthEstimate) and
+   noLevelUpdated (no LEVEL_UPDATED event, like an hls.js that fires it after choosing the first fragment) and
+   noStartJump (the start fragment is loaded but the element is never moved to the start position).
+   Fragments are counted like hls.js 1.4 loads them (10 s each, by position): the one containing the start position,
+   and another for every seek out of the current one (summary(): frags, fragsBeforePlay, seeksBeforePlay = seeks
+   by the player, not by the stand-in itself, before the first frame). */
 (function () {
   'use strict';
   var from = window.__hlsMockFrom || 'site';
@@ -13,10 +18,11 @@
   var E = {
     MEDIA_ATTACHING: 'hlsMediaAttaching', MEDIA_ATTACHED: 'hlsMediaAttached', MEDIA_DETACHED: 'hlsMediaDetached',
     MANIFEST_LOADING: 'hlsManifestLoading', MANIFEST_LOADED: 'hlsManifestLoaded', MANIFEST_PARSED: 'hlsManifestParsed',
-    LEVEL_SWITCHED: 'hlsLevelSwitched', LEVEL_LOADED: 'hlsLevelLoaded', AUDIO_TRACKS_UPDATED: 'hlsAudioTracksUpdated',
+    LEVEL_SWITCHED: 'hlsLevelSwitched', LEVEL_LOADED: 'hlsLevelLoaded', LEVEL_UPDATED: 'hlsLevelUpdated', AUDIO_TRACKS_UPDATED: 'hlsAudioTracksUpdated',
     AUDIO_TRACK_SWITCHED: 'hlsAudioTrackSwitched', FRAG_LOADED: 'hlsFragLoaded', FRAG_BUFFERED: 'hlsFragBuffered',
     ERROR: 'hlsError', DESTROYING: 'hlsDestroying'
   };
+  var FRAG = 10;
   var T = { NETWORK_ERROR: 'networkError', MEDIA_ERROR: 'mediaError', KEY_SYSTEM_ERROR: 'keySystemError', MUX_ERROR: 'muxError', OTHER_ERROR: 'otherError' };
 
   function attrs(line) {
@@ -55,6 +61,12 @@
     this.destroyed = false;
     this.from = from;
     this.media = null;
+    this.startPosition = this.config.startPosition;
+    this.frags = [];
+    this.fragsBeforePlay = null;
+    this.seeksBeforePlay = [];
+    this.fragRequested = false;
+    this.ownSeek = null;
     mock.instances.push(this);
   }
   Hls.version = '1.4.0-mock';
@@ -111,6 +123,9 @@
       self.levels = p.levels;
       self.audioTracks = p.audio;
       self.mediaUrl = p.media;
+      /* The playlist's duration (LEVEL_UPDATED details.totalduration): the WAV's length from the address, if named. */
+      var len = /[?&]len=(\d+)/.exec(url);
+      self.duration = len ? +len[1] : NaN;
       /* mock.slowStart (ms): a slow but progressing start; fragments keep arriving (FRAG_LOADED every 400 ms) before
          the first one can be shown, then the stream plays (a play() asked for meanwhile is honoured, as with MSE). */
       var slow = +mock.slowStart || 0;
@@ -121,7 +136,7 @@
         (function tick() {
           if (self.destroyed) return;
           if (Date.now() - t0 >= slow) {
-            self.feed(self.config.startPosition);
+            self.feed();
             self.startLoad(self.config.startPosition);
             if (self.media) self.media.play().catch(function () {});
             return;
@@ -131,28 +146,56 @@
         }());
         return;
       }
-      self.feed(self.config.startPosition);
+      self.feed();
       self.trigger(E.MANIFEST_LOADED, { levels: p.levels, audioTracks: p.audio });
       self.trigger(E.MANIFEST_PARSED, { levels: p.levels, audioTracks: p.audio, firstLevel: 0 });
+      /* Like hls.js 1.4 (level-controller): startLoad(config.startPosition) after the MANIFEST_PARSED handlers. */
       self.startLoad(self.config.startPosition);
     };
     xhr.onerror = function () { if (!self.destroyed) self.fail(T.NETWORK_ERROR, 'manifestLoadError', 0); };
     xhr.send();
   };
 
+  /* A fragment load (by position), counted for the tests. */
+  Hls.prototype.loadFrag = function (pos) {
+    this.fragIdx = Math.floor(Math.max(0, pos) / FRAG);
+    this.frags.push(this.fragIdx * FRAG);
+  };
+
   /* Like MSE attached to the element: the media source is in place before MANIFEST_PARSED (a play() call made then
-     waits for data). Like hls.js 1.4 (stream-controller seekToStartPos), the jump to the start position comes once
-     the first fragment is buffered (a tick after loadedmetadata), only forward, and not while the element is seeking
-     (a seek before anything is buffered becomes the start position instead: onMediaSeeking). */
+     waits for data). Like hls.js 1.4 (stream-controller seekToStartPos), the jump to the start position (decided by
+     startLoad before the first fragment) comes once that fragment is buffered (a tick after loadedmetadata), only
+     forward, and not while the element is seeking (a seek before anything is buffered becomes the start position
+     instead: onMediaSeeking). pos (recoverMediaError): the start position to load again from. */
   Hls.prototype.feed = function (pos) {
     var self = this, media = this.media;
     if (!media || !this.mediaUrl) return;
+    if (pos !== undefined) this.startPosition = pos;
+    if (media.__hlsMockWatched !== this) {
+      media.__hlsMockWatched = this;
+      media.addEventListener('seeking', function () {
+        if (self.destroyed || self.media !== media) return;
+        var own = self.ownSeek !== null && Math.abs(media.currentTime - self.ownSeek) < 0.01;
+        self.ownSeek = null;
+        if (!own && self.fragsBeforePlay === null) self.seeksBeforePlay.push(Math.round(media.currentTime));
+        if (self.fragRequested && Math.floor(media.currentTime / FRAG) !== self.fragIdx) self.loadFrag(media.currentTime);
+      });
+      media.addEventListener('playing', function () {
+        if (self.destroyed || self.media !== media || self.fragsBeforePlay !== null) return;
+        self.fragsBeforePlay = self.frags.slice();
+      });
+    }
     media.addEventListener('loadedmetadata', function once() {
       media.removeEventListener('loadedmetadata', once);
       if (self.destroyed) return;
       setTimeout(function () {
         if (self.destroyed || self.media !== media) return;
-        if (pos > 0 && media.currentTime < pos && !media.seeking) { self.log.push('seekToStartPos ' + Math.round(pos)); media.currentTime = pos; }
+        var start = self.startPosition;
+        if (start > 0 && media.currentTime < start && !media.seeking && !mock.noStartJump) {
+          self.log.push('seekToStartPos ' + Math.round(start));
+          self.ownSeek = start;
+          media.currentTime = start;
+        }
         self.currentLevel = self.level;
         self.trigger(E.FRAG_LOADED, {});
         self.trigger(E.FRAG_BUFFERED, {});
@@ -161,13 +204,25 @@
     media.src = this.mediaUrl;
   };
 
+  /* Like hls.js 1.4 (stream-controller startLoad/onLevelLoaded): the start position is the argument until the first
+     fragment is requested; LEVEL_UPDATED (with the duration) fires before that fragment is chosen, so a handler may
+     restart loading elsewhere (startLoad(0)); then the fragment containing the start position (-1: 0) is loaded. */
   Hls.prototype.startLoad = function (pos) {
     this.log.push('startLoad ' + (pos > 0 ? Math.round(pos) : pos));
-    if (!this.media || this.loading || !this.mediaUrl) return;
+    if (!this.media || !this.mediaUrl) return;
+    if (!this.fragRequested) this.startPosition = pos;
+    if (this.loading) return;
     this.loading = true;
     var top = this.levels.length - 1;
     if (this.autoLevelCapping >= 0) top = Math.min(top, this.autoLevelCapping);
     this.level = this.startLevel >= 0 ? this.startLevel : top;
+    if (!mock.noLevelUpdated) this.trigger(E.LEVEL_UPDATED, { level: this.level, details: { totalduration: this.duration } });
+    if (this.destroyed) return;
+    if (!this.fragRequested) {
+      this.fragRequested = true;
+      if (!(this.startPosition >= 0)) this.startPosition = 0;
+      this.loadFrag(this.startPosition);
+    }
     this.trigger(E.LEVEL_LOADED, { level: this.level });
     if (this._audio < 0 && this.audioTracks.length) {
       var def = 0;
@@ -207,7 +262,8 @@
   };
   mock.summary = function () {
     return mock.instances.map(function (h) {
-      return { from: h.from, destroyed: h.destroyed, startPosition: h.config.startPosition, startLevel: h.startLevel, cap: h.autoLevelCapping,
+      return { from: h.from, destroyed: h.destroyed, startPosition: h.config.startPosition, frags: h.frags.slice(), fragsBeforePlay: h.fragsBeforePlay,
+        seeksBeforePlay: h.seeksBeforePlay.slice(), startLevel: h.startLevel, cap: h.autoLevelCapping,
         config: { startFragPrefetch: h.config.startFragPrefetch, testBandwidth: h.config.testBandwidth, abrEwmaDefaultEstimate: h.config.abrEwmaDefaultEstimate },
         audio: h._audio, levels: h.levels.length, log: h.log.filter(function (x) { return !/^hls/.test(x); }) };
     });

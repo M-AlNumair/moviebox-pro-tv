@@ -1428,6 +1428,9 @@ t.test('hls.js: resume starts loading at the saved position; a quality switch is
   near((await video(page)).t, 95, 2.5, 'resumed position');
   let m = await hlsMock(page);
   assert.strictEqual(m.list[0].startPosition, 95, 'hls.js startPosition');
+  // One fragment (the one containing 95) before the first frame; hls.js moved there itself, the player did not seek.
+  assert.deepStrictEqual(m.list[0].fragsBeforePlay, [90], 'fragments before the first frame');
+  assert.deepStrictEqual(m.list[0].seeksBeforePlay, [], 'no seek by the player before the first frame');
   // The resume chip is up: Down lands on Start over; Quality is to its left.
   await key(page, 'down');
   for (let k = 0; k < 8 && await focusedAction(page) !== 'quality'; k++) await key(page, 'left');
@@ -1445,6 +1448,8 @@ t.test('hls.js: resume starts loading at the saved position; a quality switch is
   m = await hlsMock(page);
   assert.deepStrictEqual(m.list.map(x => x.destroyed), [true, false]);
   near(m.list[1].startPosition, before, 3, 'the new instance starts at the position');
+  assert.deepStrictEqual(m.list[1].fragsBeforePlay, [Math.floor(m.list[1].startPosition / 10) * 10], 'the switch loads one fragment before its first frame');
+  assert.deepStrictEqual(m.list[1].seeksBeforePlay, [], 'no seek by the player after the switch\'s metadata');
   assert.strictEqual(m.list[1].levels, 1, 'a fixed quality is its own master (one rendition)');
   assert.strictEqual((await info(page)).level, '720p');
   assert.ok(/engine hls\.js 1\.4\.0-mock \(site copy\) · 720p · 720p level/.test(await logText(page)));
@@ -1559,6 +1564,7 @@ t.test('hls.js: the app going to the background stops hls.js loading; coming bac
   const page = await open({ mbp_hls: 'mse', mbp_len: 120 });
   await play(page, MOVIE);
   await waitPlaying(page, { engine: 'hls.js' });
+  await waitTime(page, 0.3);
   await setHidden(page, true);
   assert.strictEqual((await video(page)).paused, true);
   await setHidden(page, false);
@@ -1710,6 +1716,87 @@ t.test('hls.js: a saved position inside the last minute is not resumed (bug: hls
   const v = await video(page);
   assert.ok(v.t < 5, 'started at ' + v.t);
   assert.ok(!/Resumed/.test(await text(page, '#mbptv-player .mbp-chip') || ''));
+  // Decided at LEVEL_UPDATED (the playlist's duration), before hls.js chose its first fragment: loading restarted at 0,
+  // so the only fragment before the first frame is the first one, and the player did not seek back.
+  const m = (await hlsMock(page)).list[0];
+  assert.deepStrictEqual(m.fragsBeforePlay, [0], 'fragments before the first frame');
+  assert.deepStrictEqual(m.seeksBeforePlay, [], 'no seek by the player');
+  assert.ok(m.log.indexOf('startLoad 100') >= 0 && m.log.indexOf('startLoad 0') > m.log.indexOf('startLoad 100'), JSON.stringify(m.log));
+  const log = await logText(page);
+  assert.ok(/saved position 100 is in the last minute of 120: from the start/.test(log), log);
+  assert.ok(/engine hls\.js .* · startPosition 0(\n|$)/.test(log), log);
+  assert.ok(/playing AUTO after /.test(log) && !/playing AUTO from/.test(log), log);
+  await done(page);
+});
+
+t.test('hls.js fast start: a fresh start (and a saved position of 10 s or less) loads one fragment and the player never seeks (bug: a seek to 0 at loadedmetadata cost about 3 s on Tizen 9)', async () => {
+  for (const sec of [0, 6]) {
+    const page = await open({ mbp_hls: 'mse', mbp_len: 300, mbp_seconds: sec }, { ua: TIZEN9_UA });
+    await play(page, MOVIE);
+    await waitPlaying(page, { engine: 'hls.js' });
+    const m = (await hlsMock(page)).list[0];
+    assert.strictEqual(m.startPosition, -1, 'hls.js startPosition (its own start: 0)');
+    assert.deepStrictEqual(m.fragsBeforePlay, [0], 'fragments before the first frame');
+    assert.deepStrictEqual(m.seeksBeforePlay, [], 'no seek before the first frame');
+    assert.ok((await video(page)).t < 5);
+    const log = await logText(page);
+    assert.ok(/engine hls\.js 1\.4\.0-mock \(site copy\) · AUTO · 1080p level · audio en · startPosition -1/.test(log), log);
+    assert.ok(/playing AUTO after \d+\.\d s \((?![^)]*seek)[^)]*hls\.js\)/.test(log), 'no seek in the timing: ' + log);
+    assert.ok(!/instead of/.test(log), log);
+    await done(page);
+  }
+});
+
+t.test('hls.js fast start: a resume loads only the fragment at the saved position, hls.js places it (no seek by the player); Start over goes back to 0', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 300, mbp_seconds: 95 }, { ua: TIZEN9_UA });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  near((await video(page)).t, 95, 2.5, 'resumed position');
+  const m = (await hlsMock(page)).list[0];
+  assert.strictEqual(m.startPosition, 95);
+  assert.deepStrictEqual(m.fragsBeforePlay, [90], 'one fragment, the one containing 95');
+  assert.deepStrictEqual(m.seeksBeforePlay, [], 'no seek by the player');
+  assert.ok(m.log.indexOf('seekToStartPos 95') >= 0, 'hls.js moved to its start position itself: ' + JSON.stringify(m.log));
+  let log = await logText(page);
+  assert.ok(/engine hls\.js .* · startPosition 95/.test(log), log);
+  assert.ok(/playing AUTO from 95 after \d+\.\d s \((?![^)]*seek,)[^)]*hls\.js\)/.test(log), 'no seek mark of the player: ' + log);
+  assert.ok(!/instead of/.test(log), log);
+  await page.waitForFunction(() => /Resumed at/.test(document.querySelector('#mbptv-player .mbp-chip').textContent), null, { timeout: 5000 });
+  // Start over (Down on the resume chip, OK).
+  await key(page, 'down');
+  assert.strictEqual(await focusedAction(page), 'start-over');
+  await key(page, 'enter');
+  await page.waitForFunction(() => { const v = document.querySelector('#mbptv-player video'); return v.currentTime < 5 && !v.seeking && !v.paused; }, null, { timeout: 5000 });
+  await page.waitForTimeout(500);
+  const v = await video(page);
+  assert.ok(v.t < 5 && !v.paused, 'after Start over: ' + JSON.stringify(v));
+  log = await logText(page);
+  assert.ok(/start over/.test(log) && !/instead of/.test(log), log);
+  await done(page);
+});
+
+t.test('hls.js: a start position hls.js did not apply is applied once it plays (checked after the first frame only)', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 300, mbp_seconds: 95 }, { ua: TIZEN9_UA });
+  await page.evaluate(() => { window.__hlsMock = { instances: [], loads: [], stuckAudio: false, noStartJump: true }; });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  await waitTime(page, 94);
+  const m = (await hlsMock(page)).list[0];
+  assert.deepStrictEqual(m.seeksBeforePlay, [], 'no seek before the first frame');
+  assert.ok(/at 0 instead of 95: seeking again/.test(await logText(page)), await logText(page));
+  await done(page);
+});
+
+t.test('hls.js without LEVEL_UPDATED: a saved position in the last minute is still moved back to 0 at loadedmetadata', async () => {
+  const page = await open({ mbp_hls: 'mse', mbp_len: 120, mbp_seconds: 100 }, { ua: TIZEN9_UA });
+  await page.evaluate(() => { window.__hlsMock = { instances: [], loads: [], stuckAudio: false, noLevelUpdated: true }; });
+  await play(page, MOVIE);
+  await waitPlaying(page, { engine: 'hls.js' });
+  await page.waitForTimeout(800);
+  assert.ok((await video(page)).t < 5, 'started at ' + (await video(page)).t);
+  assert.ok(!/Resumed/.test(await text(page, '#mbptv-player .mbp-chip') || ''));
+  const m = (await hlsMock(page)).list[0];
+  assert.deepStrictEqual(m.seeksBeforePlay, [0], 'the fallback seek to 0');
   await done(page);
 });
 

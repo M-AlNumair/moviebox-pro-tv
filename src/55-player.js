@@ -439,9 +439,14 @@ var NativePlayer = (function () {
   function hlsAttach(s, c, H, at, tryId) {
     var v = ui.video;
     try { v.removeAttribute('src'); v.load(); } catch (e) {}
-    /* Load from the start position directly (no first segment at 0); a resume outside the resume rules is moved back
-       to 0 at loadedmetadata. */
-    var start = at > 0 && !(s.resumePending && !(at > 10)) ? at : -1;
+    /* The start position is decided before hls.js is attached and given to it as startPosition: hls.js 1.4 loads
+       the fragment containing it first and moves the element there itself once that fragment is buffered, so the
+       player does not seek at loadedmetadata (on Tizen 9 such a seek before the first frame cost about 3 s, and a
+       saved position moved back to 0 there loaded a second fragment). A fresh start is -1 (hls.js starts at 0, or
+       at the playlist's EXT-X-START). A saved position of 10 s or less is a fresh start; a later one is checked
+       against the playlist's duration at LEVEL_UPDATED (hlsResumeRule), before hls.js picks its first fragment. */
+    var start = at > 0 ? at : -1;
+    if (s.resumePending && !(at > 10)) { s.resumePending = false; s.pendingAt = 0; start = -1; }
     /* Fast start: the start level is chosen at MANIFEST_PARSED (hlsLevels), so no bandwidth test fragment (which
        hls.js would load at the lowest level and throw away); startFragPrefetch lets the first fragment load before
        the media source is open; the bandwidth guess before any measurement is the last session's. The site's
@@ -459,7 +464,7 @@ var NativePlayer = (function () {
     mark(s, 'attach');
     try { hls = new H(cfg); } catch (e2) { s.failNote = 'hls.js: ' + clean(e2); candidateFailed(s, tryId, 'hls-other'); return; }
     var h = { hls: hls, H: H, s: s, tryId: tryId, c: c, recovered: 0, level: -1, nonFatal: 0, levelLogs: 0, reported: false, audioWant: null, prefDone: false,
-      stopped: false, dead: false, frags: 0, hostSeen: false };
+      stopped: false, dead: false, frags: 0, hostSeen: false, start: start };
     hlsCur = h;
     learnHost(c.src);
     var E = H.Events || {};
@@ -472,6 +477,7 @@ var NativePlayer = (function () {
     }
     on('MANIFEST_PARSED', function (d) { mark(s, 'manifest'); alive(s); hlsLevels(h, d); playVideo(s); });
     on('LEVEL_LOADED', function () { mark(s, 'playlist'); alive(s); });
+    on('LEVEL_UPDATED', function (d) { hlsResumeRule(h, d.details); });
     on('FRAG_LOADED', function (d) {
       var f = d.frag;
       alive(s);
@@ -487,6 +493,24 @@ var NativePlayer = (function () {
     on('ERROR', function (d) { hlsError(h, d); });
     hls.attachMedia(v);
     hls.loadSource(c.src);
+  }
+
+  /* The resume rules (beyond 10 s, before the last minute) for a site-saved position given to hls.js as its
+     startPosition. hls.js 1.4 fires LEVEL_UPDATED with the playlist's duration before it chooses the first
+     fragment (stream-controller onLevelLoaded): a position in the last minute restarts loading at 0 right there
+     (startLoad(0); -1 would mean "where loading was asked to start"), so the only fragment loaded is the first.
+     Without this event (another hls.js version) loadedmetadata applies the rules as before. */
+  function hlsResumeRule(h, details) {
+    var s = h.s, at = h.start, total = details ? +details.totalduration : 0;
+    if (h.ruled || !s.resumePending || !(at > 10) || !(total > 0)) return;
+    h.ruled = true;
+    s.resumePending = false;
+    if (at < total - 60) { s.resumed = at; return; }
+    Log.info('player', 'saved position ' + Math.round(at) + ' is in the last minute of ' + Math.round(total) + ': from the start');
+    h.start = 0;
+    s.pendingAt = 0;
+    s.lastTime = 0;
+    try { if (h.hls.config) h.hls.config.startPosition = 0; h.hls.startLoad(0); } catch (e) { Log.warn('player', 'hls.js startLoad: ' + clean(e)); }
   }
 
   function hlsLevelSwitched(h, index) {
@@ -1639,19 +1663,28 @@ var NativePlayer = (function () {
       var d = dur(), at = s.pendingAt;
       if (d > 0) s.lastDur = d;
       s.pendingAt = 0;
-      var check = -1, h = hlsOf(s);
+      /* placed: hls.js got this position as its startPosition, loaded the fragment containing it and moves the
+         element there itself once that fragment is buffered (the time is still 0 now): no seek here, only a check
+         once it plays. */
+      var check = -1, h = hlsOf(s), placed = !!h && h.start > 0 && Math.abs(h.start - at) < 1;
       if (s.resumePending) {
         s.resumePending = false;
-        if (at > 10 && d > 0 && at < d - 60) { mark(s, 'seek'); seekTo(s, at); s.resumed = at; check = at; } else {
+        if (at > 10 && d > 0 && at < d - 60) {
+          s.resumed = at;
+          check = at;
+          if (placed) s.lastTime = at; else { mark(s, 'seek'); seekTo(s, at); }
+        } else {
           s.lastTime = 0;
-          /* hls.js was given the saved position as its startPosition and jumps there once its first fragment is
-             buffered (the time is still 0 now): seeking to 0 first makes it start at 0, and the check below undoes
-             a late jump. */
-          if (h) { seekTo(s, 0); check = 0; } else if (ui.video.currentTime > 1) seekTo(s, 0);
+          /* hls.js without a LEVEL_UPDATED decision was given the saved position and jumps there once its first
+             fragment is buffered: seeking to 0 first makes it start at 0, and the check below undoes a late jump. */
+          if (placed) { seekTo(s, 0); check = 0; } else if (ui.video.currentTime > 1) seekTo(s, 0);
         }
-      } else if (at > 0 && d > 0) { seekTo(s, Math.min(at, d - 1)); check = s.lastTime; }
-      /* Native HLS players can ignore a seek made this early (and start at 0): checked once it plays. */
-      s.seekCheck = check > 1 || (check === 0 && h) ? { target: check, tries: 0, at: U.now() } : null;
+      } else if (at > 0 && d > 0) {
+        if (placed) { s.lastTime = at; check = at; } else { seekTo(s, Math.min(at, d - 1)); check = s.lastTime; }
+      }
+      /* Native HLS players can ignore a seek made this early (and start at 0): checked once it plays. A position
+         hls.js applies itself is checked from the first frame on (hls.js moves there after loadedmetadata). */
+      s.seekCheck = check > 1 || (check === 0 && placed) ? { target: check, tries: 0, at: U.now(), afterPlay: placed } : null;
       if (s.blocked) reveal(s);
       alive(s);
       audioRefresh(s);
@@ -1767,10 +1800,11 @@ var NativePlayer = (function () {
   }
 
   /* A position set at loadedmetadata (resume, quality or file switch, fresh links) must actually be reached: some
-     native HLS players start from 0 instead. Checked when it plays; seeks again at most twice. */
+     native HLS players start from 0 instead. Checked when it plays; seeks again at most twice. A start position
+     hls.js applies itself (afterPlay) is only checked from the first frame on. */
   function checkSeek(s) {
     var k = s.seekCheck, v = ui && ui.video;
-    if (!k || !v || v.seeking || !s.ready) return;
+    if (!k || !v || v.seeking || !s.ready || (k.afterPlay && s.playedTry !== s.tryId)) return;
     var t = v.currentTime;
     if (U.now() - k.at > 60000 || Math.abs(t - k.target) <= CFG.seekSlack) { s.seekCheck = null; return; }
     if (k.tries >= 2) {
@@ -1793,6 +1827,7 @@ var NativePlayer = (function () {
       var lv = hlsLevelNow(h), au = hlsAudioCode(h);
       if (lv) parts.push(lv + ' level');
       if (au) parts.push('audio ' + au);
+      parts.push('startPosition ' + (h.start > 0 ? Math.round(h.start) : h.start));
       if (c.afterNative && verdict() !== 'refuses') {
         Store.local.set(HLS_VERDICT, { ua: String(navigator.userAgent || ''), native: 'refuses', at: U.now() });
         Log.info('player', 'the platform player refuses HLS here: hls.js from now on (remembered)');
